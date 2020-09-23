@@ -15,21 +15,26 @@ count_limit = True
 
 class PktDirection(Enum):
     not_defined = 0
-    client_to_server = 1
-    server_to_client = 2
-    client_to_local_network  = 3
-    local_network_to_client = 4
+    iot_to_internet = 1
+    internet_to_iot = 2
+    iot_to_iot = 3
+    iot_to_local_network  = 4
+    local_network_to_iot = 5
+    internet_to_local_network = 6
+    local_to_local = 7
+    local_to_internet = 8
 
 def analyse_pcap(NetworkTraffic,file):
     ## Count limit is to limit processing for testing logic
     if count_limit is True:
-        limit = 400000 #No of packets to process
+        limit = 50000 #No of packets to process
     else:
         limit = math.inf
     count = 1
-    device_traffic = collections.defaultdict(dict) #Key is the device mac address and values are packets incoming and outgoing from the device(all network interactions)
     non_ip_packets = []
     first_pkt_time = None
+    error_handling = []
+    packets_for_analysis = []
     for pkt_data,pkt_metadata in RawPcapReader(file):
         if count < limit:
             ether_pkt = Ether(pkt_data)
@@ -63,7 +68,6 @@ def analyse_pcap(NetworkTraffic,file):
             packet_data['ordinal'] = count
             packet_data['eth_dst'] = ether_pkt.dst
             if count == 1:
-                print("Test", count, first_pkt_time)
                 first_pkt_time, relative_ts  = get_timestamp(pkt_metadata, count)
                 packet_data['relative_timestamp'] = relative_ts
             else:
@@ -84,17 +88,21 @@ def analyse_pcap(NetworkTraffic,file):
             """
               Sorting incoming and outgoing traffic for each device 
             """
-            if ether_pkt.src not in device_traffic.keys():
-                device_traffic[ether_pkt.src] = {'incoming': None,
+            if ether_pkt.src not in NetworkTraffic.device_traffic.keys():
+                NetworkTraffic.device_traffic[ether_pkt.src] = {'incoming': None,
                                                  'outgoing': packet_data}
-            if ether_pkt.dst not in device_traffic.keys():
-                device_traffic[ether_pkt.dst] = {'incoming': packet_data,
+            if ether_pkt.dst not in NetworkTraffic.device_traffic.keys():
+                NetworkTraffic.device_traffic[ether_pkt.dst] = {'incoming': packet_data,
                                                  'outgoing': None}
             else:
-                device_traffic[ether_pkt.src]['outgoing'] = packet_data
-                device_traffic[ether_pkt.dst]['incoming'] = packet_data
-
+                try:
+                    NetworkTraffic.device_traffic[ether_pkt.src]['outgoing'].update(packet_data)
+                    NetworkTraffic.device_traffic[ether_pkt.dst]['incoming'].update(packet_data)
+                except AttributeError:
+                    error_handling.append((NetworkTraffic.device_traffic,ether_pkt.src, ether_pkt.dst))
         count += 1
+
+
 
 def tcp_info(ip_pkt, ipv):
     tcp_data = {}
@@ -156,15 +164,25 @@ def get_pkt_direction(NetworkTraffic, ether_pkt):
     direction = PktDirection.not_defined
     if ether_pkt.src in NetworkTraffic.iot_mac_addr:
         if ether_pkt.dst in NetworkTraffic.non_iot.values():
-            direction = PktDirection.client_to_local_network
+            direction = PktDirection.iot_to_local_network
         elif ether_pkt.dst in NetworkTraffic.iot_mac_addr:
-            direction = PktDirection.client_to_local_network
+            direction = PktDirection.iot_to_iot
         else:
-            direction = PktDirection.client_to_server
-    print(direction)
-    # elif ether_pkt.src in NetworkTraffic.non_iot.values():
+            direction = PktDirection.iot_to_internet
+    elif ether_pkt.src in NetworkTraffic.non_iot.values():
+        if ether_pkt.dst in NetworkTraffic.iot_mac_addr:
+            direction = PktDirection.local_network_to_iot
+        elif ether_pkt.dst in NetworkTraffic.non_iot.values():
+            direction = PktDirection.local_to_local
+        else:
+            direction = PktDirection.local_to_internet
+    elif ether_pkt.src not in NetworkTraffic.iot_mac_addr and NetworkTraffic.non_iot.values(): #Need to check if just an else statement will work here
+        if ether_pkt.dst in NetworkTraffic.iot_mac_addr:
+            direction = PktDirection.internet_to_iot
+        if ether_pkt.dst in NetworkTraffic.non_iot.values():
+            direction - PktDirection.internet_to_local_network
 
-
+    return direction
 
 
 def flow_filter(ip_pkt):
@@ -174,4 +192,13 @@ def flow_filter(ip_pkt):
 if __name__ == "__main__":
     NetworkTraffic = NetworkTrace("16-09-23.pcap")
     analyse_pcap(NetworkTraffic, "16-09-23.pcap")
+    lifx = NetworkTraffic.iot_devices["Light Bulbs LiFX Smart Bulb"]
+    tp_link_plug = NetworkTraffic.iot_devices["TP-Link Smart plug"]
+    smart_camera = NetworkTraffic.iot_devices["Samsung SmartCam"]
+
+    camera_to_internet = sum(str(value) == "iot_to_internet" for value in NetworkTraffic.device_traffic[smart_camera]['outgoing']['direction'])
+    internet_to_camera = sum(str(value) == "internet_to_iot" for value in NetworkTraffic.device_traffic[smart_camera]['incoming']['direction'])
+
+    camera_to_internet = camera_to_internet, internet_to_camera
+    print(camera_to_internet)
 
