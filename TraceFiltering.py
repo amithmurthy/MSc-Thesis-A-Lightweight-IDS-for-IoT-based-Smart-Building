@@ -27,16 +27,17 @@ class PktDirection(Enum):
 def analyse_pcap(NetworkTraffic,file):
     ## Count limit is to limit processing for testing logic
     if count_limit is True:
-        limit = 50000 #No of packets to process
+        limit = 100 #No of packets to process
     else:
         limit = math.inf
     count = 1
     non_ip_packets = []
     first_pkt_time = None
     error_handling = []
-    packets_for_analysis = []
+
     for pkt_data,pkt_metadata in RawPcapReader(file):
-        if count < limit:
+        packet_data = {}
+        if count <= limit:
             ether_pkt = Ether(pkt_data)
             if 'type' not in ether_pkt.fields:
                 # Logic Link Control (LLC) frames will have 'len' instead of 'type'.
@@ -44,10 +45,11 @@ def analyse_pcap(NetworkTraffic,file):
                 continue
             ### MAC Address and IP address extraction and sorting traffic to each device ########
 
-            packet_data = {}
             ipv = None
             if ether_pkt.src not in NetworkTraffic.mac_to_ip.keys():
                 NetworkTraffic.mac_to_ip[ether_pkt.src] = None
+            if ether_pkt.dst not in NetworkTraffic.mac_to_ip.keys():
+                NetworkTraffic.mac_to_ip[ether_pkt.dst] = None
             if IP or IPv6 in ether_pkt:
                 if IPv6 in ether_pkt:
                     ip_pkt = ether_pkt[IPv6]
@@ -62,10 +64,10 @@ def analyse_pcap(NetworkTraffic,file):
                         break
                 if ip_pkt.src not in NetworkTraffic.mac_to_ip:
                     NetworkTraffic.mac_to_ip[ether_pkt.src] = ip_pkt.src
-                    NetworkTraffic.unique_ip.append(ip_pkt.src) #If its not in mac_to_ip then it won't be in list either so append. Saves another check just for the list
-                elif ip_pkt.dst not in NetworkTraffic.unique_ip:
-                    NetworkTraffic.unique_ip.append(ip_pkt.dst)
+                elif ip_pkt.dst not in NetworkTraffic.mac_to_ip:
+                    NetworkTraffic.mac_to_ip[ether_pkt.dst] = ip_pkt.dst
             packet_data['ordinal'] = count
+            packet_data['eth_src'] = ether_pkt.src
             packet_data['eth_dst'] = ether_pkt.dst
             if count == 1:
                 first_pkt_time, relative_ts  = get_timestamp(pkt_metadata, count)
@@ -78,7 +80,6 @@ def analyse_pcap(NetworkTraffic,file):
             """
             Perform TCP info check -> returns a list of features which is added to packet_data['tcp info']
             """
-
             if TCP in ip_pkt:
                 packet_data['protocol'] = "TCP"
                 packet_data['tcp_data'] = tcp_info(ip_pkt, ipv)
@@ -86,21 +87,50 @@ def analyse_pcap(NetworkTraffic,file):
                 packet_data["protocol"] = "UDP"
                 packet_data["udp_data"] = udp_info(ip_pkt, ipv)
             """
-              Sorting incoming and outgoing traffic for each device 
+                        Appending packet_data to device_traffic dictionary 
             """
-            if ether_pkt.src not in NetworkTraffic.device_traffic.keys():
-                NetworkTraffic.device_traffic[ether_pkt.src] = {'incoming': None,
-                                                 'outgoing': packet_data}
-            if ether_pkt.dst not in NetworkTraffic.device_traffic.keys():
-                NetworkTraffic.device_traffic[ether_pkt.dst] = {'incoming': packet_data,
-                                                 'outgoing': None}
-            else:
-                try:
-                    NetworkTraffic.device_traffic[ether_pkt.src]['outgoing'].update(packet_data)
-                    NetworkTraffic.device_traffic[ether_pkt.dst]['incoming'].update(packet_data)
-                except AttributeError:
-                    error_handling.append((NetworkTraffic.device_traffic,ether_pkt.src, ether_pkt.dst))
+
+            if ether_pkt.src or ether_pkt.dst not in zip(NetworkTraffic.non_iot.values(), NetworkTraffic.iot_mac_addr):
+                if ether_pkt.src in zip(NetworkTraffic.non_iot.values(), NetworkTraffic.iot_mac_addr):
+                    if ether_pkt.dst in NetworkTraffic.internet_traffic.keys():
+                        NetworkTraffic.internet_traffic[ether_pkt.dst].append(packet_data)
+                    else:
+                        # print(NetworkTraffic)
+                        NetworkTraffic.internet_traffic[ether_pkt.dst] = []
+                        NetworkTraffic.internet_traffic[ether_pkt.dst].append(packet_data)
+                elif ether_pkt.dst in zip(NetworkTraffic.non_iot.values(), NetworkTraffic.iot_mac_addr):
+                    print("src is internet", ether_pkt.src)
+                    if ether_pkt.src in NetworkTraffic.internet_traffic.keys():
+                        NetworkTraffic.internet_traffic[ether_pkt.src].append(packet_data)
+                    else:
+                        NetworkTraffic.internet_traffic[ether_pkt.src] = []
+                        NetworkTraffic.internet_traffic[ether_pkt.src].append(packet_data)
+
+
+            if ether_pkt.src or ether_pkt.dst in NetworkTraffic.device_traffic:
+                if ether_pkt.src in NetworkTraffic.device_traffic and ether_pkt.dst not in NetworkTraffic.device_traffic:
+                    NetworkTraffic.device_traffic[ether_pkt.src].append(packet_data)
+                elif ether_pkt.dst in NetworkTraffic.device_traffic and ether_pkt.src not in NetworkTraffic.device_traffic:
+                    NetworkTraffic.device_traffic[ether_pkt.dst].append(packet_data)
+                if ether_pkt.src and ether_pkt.dst in NetworkTraffic.device_traffic:
+                    NetworkTraffic.device_traffic[ether_pkt.src].append(packet_data)
+                    NetworkTraffic.device_traffic[ether_pkt.dst].append(packet_data)
+
+
+            if ether_pkt.src or ether_pkt.dst in NetworkTraffic.local_deivice_traffic.values():
+                if ether_pkt.src in NetworkTraffic.local_deivice_traffic.values() and ether_pkt.dst not in NetworkTraffic.local_deivice_traffic.values():
+                    NetworkTraffic.local_deivice_traffic[ether_pkt.src].append(packet_data)
+                elif ether_pkt.dst in NetworkTraffic.local_deivice_traffic and ether_pkt.src not in NetworkTraffic.local_deivice_traffic:
+                    NetworkTraffic.local_deivice_traffic[ether_pkt.dst].append(packet_data)
+                elif ether_pkt.src and ether_pkt.dst in NetworkTraffic.local_deivice_traffic.values():
+                    NetworkTraffic.local_deivice_traffic[ether_pkt.src].append(packet_data)
+                    NetworkTraffic.local_deivice_traffic[ether_pkt.dst].append(packet_data)
+
+            # if ether_pkt.dst in NetworkTraffic.device_traffic.keys():
+            #     NetworkTraffic.device_traffic[ether_pkt.dst].append(packet_data)
+            # elif ether_pkt.src and ether_pkt.dst not in NetworkTraffic.device_traffic or NetworkTraffic.
         count += 1
+
 
 
 
@@ -180,8 +210,7 @@ def get_pkt_direction(NetworkTraffic, ether_pkt):
         if ether_pkt.dst in NetworkTraffic.iot_mac_addr:
             direction = PktDirection.internet_to_iot
         if ether_pkt.dst in NetworkTraffic.non_iot.values():
-            direction - PktDirection.internet_to_local_network
-
+            direction = PktDirection.internet_to_local_network
     return direction
 
 
@@ -189,16 +218,32 @@ def flow_filter(ip_pkt):
     pass
 
 
+def direction_stats(device):
+    internet_to_device = 0
+    device_to_internet = 0
+    device_to_local = 0
+    local_to_device = 0
+    local_to_internet = 0
+    internet_to_local = 0
+    device_to_device = 0
+
+    for device in NetworkTraffic.device_traffic:
+        print(device)
+        traffic = NetworkTraffic.device_traffic[device]
+        input_count = 0
+        output_count = 0
+        for packet in traffic:
+            if packet["eth_src"] == device:
+                output_count += 1
+            elif packet["eth_dst"] == device:
+                input_count += 1
+
 if __name__ == "__main__":
     NetworkTraffic = NetworkTrace("16-09-23.pcap")
     analyse_pcap(NetworkTraffic, "16-09-23.pcap")
     lifx = NetworkTraffic.iot_devices["Light Bulbs LiFX Smart Bulb"]
     tp_link_plug = NetworkTraffic.iot_devices["TP-Link Smart plug"]
     smart_camera = NetworkTraffic.iot_devices["Samsung SmartCam"]
+    # direction_stats(smart_camera)
 
-    camera_to_internet = sum(str(value) == "iot_to_internet" for value in NetworkTraffic.device_traffic[smart_camera]['outgoing']['direction'])
-    internet_to_camera = sum(str(value) == "internet_to_iot" for value in NetworkTraffic.device_traffic[smart_camera]['incoming']['direction'])
-
-    camera_to_internet = camera_to_internet, internet_to_camera
-    print(camera_to_internet)
-
+    print(NetworkTraffic.internet_traffic)

@@ -4,7 +4,7 @@ class NetworkTrace:
     def __init__(self, trace_file):
         self.trace_file = trace_file
         self.mac_to_ip = {}  #Aim is to map device to its IP addresses. A device may have multiple IPs but only one MAC
-        self.unique_ip = [] # All the unique ip addresses in the capture
+
         ## Reference is UNSW IoT traffic profile dataset, the information for mac address found at: https://iotanalytics.unsw.edu.au/resources/List_Of_Devices.txt
         self.iot_devices = {"Smart Things": "d0:52:a8:00:67:5e",
                        "Amazon Echo": "44:65:0d:56:cc:d3",
@@ -41,4 +41,14 @@ class NetworkTrace:
             "IPhone": "d0:a6:37:df:a1:e1",
             "MacBook/Iphone": "f4:5c:89:93:cc:85",
         }
-        self.device_traffic = collections.defaultdict(dict)  # Key is the device mac address and values are packets incoming and outgoing from the device(all network interactions)
+        self.keys_list = []
+        for i in self.iot_devices:
+            self.keys_list.append(self.iot_devices[i])
+        # self.small_keys.append("14:cc:20:51:33:ea")
+        # self.small_keys.append("18:b7:9e:02:20:44")
+        self.device_traffic = {addr: [] for addr in self.keys_list}  # Key is the device mac address and values are list of packets (dictionaries)
+        # self.device_traffic = {"14:cc:20:51:33:ea":[], "18:b7:9e:02:20:44":[]}
+        self.local_deivice_traffic = {addr: [] for addr in self.non_iot.values()}
+        self.internet_traffic = {}
+
+
