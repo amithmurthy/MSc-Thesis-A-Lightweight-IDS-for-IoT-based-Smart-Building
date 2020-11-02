@@ -140,7 +140,7 @@ class DeviceProfile:
         plt.savefig(self.device_name+".png")
         plt.show()
 
-    def plot_protocol_flows(self):
+    def plot_flow_thorughput(self ):
         fig = plt.figure()
         ax = fig.add_subplot(1, 1, 1)
         tcp_legend_control = 0

@@ -1,5 +1,5 @@
 from scapy.all import *
-from scapy.layers.l2 import Ether
+from scapy.layers.l2 import Ether, ARP
 from scapy.layers.inet import TCP,UDP, IP, ICMP
 from scapy.layers.inet6 import IPv6, IPv6ExtHdrFragment
 from scapy.layers.dns import *
@@ -12,6 +12,7 @@ from datetime import datetime, date
 from PacketLevelSignature import GraphNetwork
 from Device import DeviceProfile
 
+
 """Gloabl variables"""
 count_limit = True
 device_filter = False
@@ -21,43 +22,45 @@ class PktDirection(Enum):
     iot_to_internet = 1
     internet_to_iot = 2
     iot_to_iot = 3
-    iot_to_local_network  = 4
+    iot_to_local_network = 4
     local_network_to_iot = 5
     internet_to_local_network = 6
     local_to_local = 7
     local_to_internet = 8
 
 
-def analyse_pcap(NetworkTraffic,file, device_id):
-    ## Count limit is to limit processing for testing logic
+def analyse_pcap(NetworkTraffic, file, device_id):
+    # Count limit is to limit processing for testing logic
     if count_limit is True:
-        limit = 300000 #No of packets to process
+        # No of packets to process
+        limit = 1000
     else:
         limit = math.inf
-    count = 1
+    count = 0
     non_ip_packets = []
     first_pkt_time = None
 
-    for pkt_data,pkt_metadata in RawPcapReader(file):
+    for pkt_data, pkt_metadata in RawPcapReader(file):
         packet_data = {}
+        count += 1
         if count <= limit:
             ether_pkt = Ether(pkt_data)
             # if 'type' not in ether_pkt.fields:
             #     # Logic Link Control (LLC) frames will have 'len' instead of 'type'.
             #     # We disregard those
             #     continue
-            ### MAC Address and IP address extraction and sorting traffic to each device ########
+            """ MAC Address and IP address extraction and sorting traffic to each device """
             if device_filter is True:
-                if str(ether_pkt.src) != device_id and str(ether_pkt.dst) != device_id:
+                if ether_pkt.src != device_id and str(ether_pkt.dst) != device_id:
                     continue
-
+            if ARP in ether_pkt:
+                continue
             ipv = None
-
             if IP or IPv6 in ether_pkt:
                 if IPv6 in ether_pkt:
                     ip_pkt = ether_pkt[IPv6]
                     ipv = 6
-                    # Determing TCP payload: have to first check for ip fragmentation. Thus, different checks for ipv4 and ipv6.
+                    """ TCP payload: have to first check for ip fragmentation + different checks for ipv4 and ipv6."""
                     if ip_pkt.fields == 'M':
                         break
                 elif IP in ether_pkt:
@@ -69,18 +72,17 @@ def analyse_pcap(NetworkTraffic,file, device_id):
             else:
                 non_ip_packets.append(ether_pkt)
 
-            if ether_pkt.src not in NetworkTraffic.mac_to_ip:
+            if ether_pkt.src not in list(NetworkTraffic.mac_to_ip.keys()):
                 NetworkTraffic.mac_to_ip[ether_pkt.src] = []
                 NetworkTraffic.mac_to_ip[ether_pkt.src].append(ip_pkt.src)
-            else:
-                # ether_pkt.src in NetworkTraffic.mac_to_ip:
+            elif ether_pkt.src in list(NetworkTraffic.mac_to_ip.keys()):
                 if ip_pkt.src not in NetworkTraffic.mac_to_ip[ether_pkt.src]:
                     NetworkTraffic.mac_to_ip[ether_pkt.src].append(ip_pkt.src)
-            if ether_pkt.dst not in NetworkTraffic.mac_to_ip:
+
+            if ether_pkt.dst not in list(NetworkTraffic.mac_to_ip.keys()):
                 NetworkTraffic.mac_to_ip[ether_pkt.dst] = []
                 NetworkTraffic.mac_to_ip[ether_pkt.dst].append(ip_pkt.dst)
-            else:
-                # ether_pkt.dst in NetworkTraffic.mac_to_ip:
+            elif ether_pkt.dst in list(NetworkTraffic.mac_to_ip.keys()):
                 if ip_pkt.dst not in NetworkTraffic.mac_to_ip[ether_pkt.dst]:
                     NetworkTraffic.mac_to_ip[ether_pkt.dst].append(ip_pkt.dst)
 
@@ -101,39 +103,51 @@ def analyse_pcap(NetworkTraffic,file, device_id):
             """
             src_port = None
             dst_port = None
+            protocol = None
             if TCP in ip_pkt:
                 packet_data["protocol"] = "TCP"
                 packet_data['tcp_data'] = tcp_info(ip_pkt, ipv)
                 src_port = packet_data['tcp_data']['src_port']
                 dst_port = packet_data['tcp_data']['dst_port']
+                protocol = "tcp_data"
             elif UDP in ip_pkt:
                 packet_data["protocol"] = "UDP"
                 packet_data["udp_data"] = udp_info(ip_pkt, ipv)
                 src_port = packet_data['udp_data']['src_port']
                 dst_port = packet_data['udp_data']['dst_port']
-                if DNS in ip_pkt:
-                    dns_pkt = ip_pkt[DNS]
-                    if dns_pkt.qr == 0:
-                        domain_queried = dns_pkt.qd.qname
-                        packet_data["dns_query"] = domain_queried
+                protocol = "udp_data"
+                # if DNS in ip_pkt:
+                #     dns_pkt = ip_pkt[DNS]
+                #     if dns_pkt.qr == 0:
+                #         domain_queried = dns_pkt.qd.qname
+                #         packet_data["dns_query"] = domain_queried
                         # print(domain_queried)
-
                 """ 
-                    elif DNSRR in dns_pkt:
-                        DNSRR is the response to the query     
+                        elif DNSRR in dns_pkt:
+                            DNSRR is the response to the query     
                 """
+
             elif ICMP in ip_pkt:
                 packet_data["protocol"] = "ICMP"
                 packet_data["icmp_data"] = icmp_info(ip_pkt, ipv)
+                protocol = "icmp_data"
+            # elif ARP in ether_pkt:
+            #     packet_data["protocol"] = "ARP"
+            #     protocol = "ARP"
             else:
                 packet_data["protocol"] = "not defined yet"
                 packet_data["payload_len"] = len(ip_pkt.payload)
+                protocol = "unknown"
                 # for layer in get_packet_layers(ether_pkt):
                 #     print(layer.name,"/")
 
-
+            # print(packet_data['relative_timestamp'])
 
             flow_tuple = (ip_pkt.src, ip_pkt.dst, src_port, dst_port, packet_data["protocol"])
+            # if flow_tuple != ('52.87.241.159', '192.168.1.106', 443, 46330, "TCP"):
+            #     continue
+            # if flow_tuple != ('192.168.1.106', '52.87.241.159', 46330, 443, "TCP"):
+            #     continue
 
             if flow_tuple in NetworkTraffic.flow_table:
                 NetworkTraffic.flow_table[flow_tuple].append(packet_data)
@@ -157,19 +171,19 @@ def analyse_pcap(NetworkTraffic,file, device_id):
                     NetworkTraffic.internet_traffic[ether_pkt.dst] = []
                     NetworkTraffic.internet_traffic[ether_pkt.dst].append(packet_data)
 
+            if packet_data['protocol'] == "TCP" or packet_data["protocol"] == "UDP":
+                if ether_pkt.src in NetworkTraffic.keys_list:
+                    # NetworkTraffic.device_traffic[ether_pkt.src].append(packet_data)
+                    NetworkTraffic.sort_flow(flow_tuple, packet_data, "outgoing", protocol)
+                if ether_pkt.dst in NetworkTraffic.keys_list:
+                    # NetworkTraffic.device_traffic[ether_pkt.dst].append(packet_data)
+                    NetworkTraffic.sort_flow(flow_tuple, packet_data, "incoming", protocol)
 
-            if ether_pkt.src in NetworkTraffic.device_traffic:
-                # NetworkTraffic.device_traffic[ether_pkt.src].append(packet_data)
-                NetworkTraffic.sort_flow(flow_tuple, packet_data, "outgoing")
-            if ether_pkt.dst in NetworkTraffic.device_traffic:
-                # NetworkTraffic.device_traffic[ether_pkt.dst].append(packet_data)
-                NetworkTraffic.sort_flow(flow_tuple, packet_data, "incoming")
+
             if ether_pkt.src in NetworkTraffic.local_device_traffic:
                 NetworkTraffic.local_device_traffic[ether_pkt.src].append(packet_data)
             if ether_pkt.dst in NetworkTraffic.local_device_traffic:
                 NetworkTraffic.local_device_traffic[ether_pkt.dst].append(packet_data)
-
-        count += 1
 
 
 def tcp_info(ip_pkt, ipv):
@@ -197,19 +211,13 @@ def tcp_info(ip_pkt, ipv):
 
 def udp_info(ip_pkt, ipv):
     udp_pkt = ip_pkt[UDP]
-    udp_data = {}
-    udp_data['src_port'] = udp_pkt.sport
-    udp_data['dst_port'] = udp_pkt.dport
-    #UDP header is fixed at 8 bytes. Length field specifies length of header + data => len - 8 = payload
-    udp_data['payload_len'] = udp_pkt.len - 8
-
+    udp_data = {'src_port': udp_pkt.sport, 'dst_port': udp_pkt.dport, 'payload_len': udp_pkt.len - 8}
+    # UDP header is fixed at 8 bytes. Length field specifies length of header + data => len - 8 = payload
     return udp_data
 
 def icmp_info(ip_pkt, ipv):
     icmp_pkt = ip_pkt[ICMP]
-    icmp_data = {}
-    icmp_data['payload_len'] = len(icmp_pkt.payload) - 8
-    icmp_data['type'] = icmp_pkt.type
+    icmp_data = {'payload_len': len(icmp_pkt.payload) - 8, 'type': icmp_pkt.type}
     return icmp_data
 
 
@@ -262,22 +270,13 @@ def get_pkt_direction(NetworkTraffic, ether_pkt):
             direction = PktDirection.local_to_local
         else:
             direction = PktDirection.local_to_internet
-    elif ether_pkt.src not in NetworkTraffic.iot_mac_addr and NetworkTraffic.non_iot.values(): #Need to check if just an else statement will work here
+    # Need to check if just an else statement will work here
+    elif ether_pkt.src not in NetworkTraffic.iot_mac_addr and NetworkTraffic.non_iot.values():
         if ether_pkt.dst in NetworkTraffic.iot_mac_addr:
             direction = PktDirection.internet_to_iot
         if ether_pkt.dst in NetworkTraffic.non_iot.values():
             direction = PktDirection.internet_to_local_network
     return direction
-
-
-def get_packet_layers(pkt):
-    counter = 0
-    while True:
-        layer = pkt.getlayer(counter)
-        if layer is None:
-            break
-        yield layer
-        counter += 1
 
 def pickle_file(traffic, pickle_file_out):
     with open(pickle_file_out, 'wb') as pickle_fd:
@@ -288,32 +287,42 @@ def check_flows():
         if value in NetworkTraffic.flow_table.keys():
             print("Device", value, "has", len(NetworkTraffic.flow_table[value]), " flows")
 
+def create_device_plots():
+    # device_object_list = []
+    for key in NetworkTraffic.iot_devices:
+        addr = NetworkTraffic.iot_devices[key]
+        if addr not in NetworkTraffic.mac_to_ip:
+            print("key not in dict")
+            continue
+        iot_device = DeviceProfile(key, addr, NetworkTraffic.mac_to_ip[addr])
+        iot_device.update_profile(NetworkTraffic.device_flows[addr])
+        # device_object_list.append(iot_device)
+
+def get_packet_layers(pkt):
+    counter = 0
+    while True:
+        layer = pkt.getlayer(counter)
+        if layer is None:
+            break
+        yield layer
+        counter += 1
+
+
+
 if __name__ == "__main__":
     NetworkTraffic = NetworkTrace("16-09-23.pcap")
     analyse_pcap(NetworkTraffic, "16-09-23.pcap", "30:8c:fb:2f:e4:b2")
-    # NetworkTraffic.flow_stats(NetworkTraffic.iot_devices["Dropcam"])
+    NetworkTraffic.flow_stats(NetworkTraffic.iot_devices["Dropcam"])
     # NetworkTraffic.flow_stats("14:cc:20:51:33:ea")
     # print(NetworkTraffic.device_flow_stats[NetworkTraffic.iot_devices["HP Printer"]])
     # NetworkTraffic.plot_device_flow(NetworkTraffic.iot_devices["TPLink Router Bridge LAN (Gateway)"])
     # print(NetworkTraffic.device_flows)
-    GraphNetwork.build_network(NetworkTraffic)
+    # GraphNetwork.build_network(NetworkTraffic)
+
     # print(NetworkTraffic.device_flows)
     # print(NetworkTraffic.device_flow_stats)
-    print("device control")
-
-
 
     # dropcam = DeviceProfile("Dropcam", "30:8c:fb:2f:e4:b2", NetworkTraffic.mac_to_ip["30:8c:fb:2f:e4:b2"])
     # dropcam.update_profile(NetworkTraffic.device_flows["30:8c:fb:2f:e4:b2"])
-
-    # device_object_list = []
-    # for key in NetworkTraffic.iot_devices:
-    #     addr = NetworkTraffic.iot_devices[key]
-    #     if addr not in NetworkTraffic.mac_to_ip:
-    #         print("key not in dict")
-    #         continue
-    #     iot_device = DeviceProfile(key, addr, NetworkTraffic.mac_to_ip[addr])
-    #     iot_device.update_profile(NetworkTraffic.device_flows[addr])
-    #     device_object_list.append(iot_device)
 
 

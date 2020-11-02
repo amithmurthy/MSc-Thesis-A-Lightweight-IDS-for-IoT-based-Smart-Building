@@ -30,7 +30,7 @@ class GraphNetwork():
                     nodes.append(value)
         MG.add_nodes_from(iot_nodes)
         MG.add_nodes_from(nodes)
-        print("test 1")
+        # print("test 1")
         tcp_edges = []
         udp_edges = []
         edges = []
@@ -51,7 +51,7 @@ class GraphNetwork():
         MG.add_edges_from(tcp_edges)
         MG.add_edges_from(udp_edges)
         # MG.add_edges_from(edges)
-        pos = nx.spring_layout(MG, k=0.25, iterations=10)
+        pos = nx.spring_layout(MG)
         # print(iot_nodes)
         # for node in MG:
         #     if node in iot_nodes:

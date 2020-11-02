@@ -5,7 +5,6 @@ from datetime import datetime, date
 import logging
 
 
-
 class NetworkTrace:
     def __init__(self, trace_file):
         self.trace_file = trace_file
@@ -82,6 +81,7 @@ class NetworkTrace:
                     flow_duration = abs(self.device_flows[device][flow_direction][flow][0]['relative_timestamp'].total_seconds())
                 self.device_flow_stats[device][flow_direction][flow].append(flow_duration)
                 # pkt_count = 0
+                # print(flow, "duration:", flow_duration)
                 for packet in self.device_flows[device][flow_direction][flow]:
                     if packet["protocol"] == "TCP":
                         flow_size += packet["tcp_data"]["payload_len"]
@@ -93,7 +93,30 @@ class NetworkTrace:
                         flow_size += packet['payload_len']
                     # pkt_count += 1
                 self.device_flow_stats[device][flow_direction][flow].append(flow_size)
-                # self.device_flow_stats[device][flow_direction][flow].append(pkt_count)
+                self.device_flow_stats[device][flow_direction][flow].append(pkt_count)
+                print("--------------")
+                print("Flow:", flow)
+                print("first pkt time:", self.device_flows[device][flow_direction][flow][0]['relative_timestamp'])
+                print("Total packets:", pkt_count)
+                print("Duration:", flow_duration)
+                print("Flow size:", flow_size)
+                print("Flow direction:", flow_direction)
+                print("--------------")
+                # if flow_direction == "outgoing":
+                #     print("-----OUTGOING ANALYSIS----------")
+                #     print("source:", self.device_flows[device][flow_direction][flow][0]['ip_src'])
+                #     print("destination:", self.device_flows[device][flow_direction][flow][0]['ip_dst'])
+                #     print("src port:", self.device_flows[device][flow_direction][flow][0]['tcp_data']['src_port'])
+                #     print("dst port:", self.device_flows[device][flow_direction][flow][0]['tcp_data']['dst_port'])
+                # elif flow_direction == "incoming":
+                #     print("-----INCOMING ANALYSIS----------")
+                #     print("source:", self.device_flows[device][flow_direction][flow][0]['ip_src'])
+                #     print("destination:", self.device_flows[device][flow_direction][flow][0]['ip_dst'])
+                #     print("src port:", self.device_flows[device][flow_direction][flow][0]['tcp_data']['src_port'])
+                #     print("dst port:", self.device_flows[device][flow_direction][flow][0]['tcp_data']['dst_port'])
+
+                # print(self.mac_to_ip[self.device_flows[device][flow_direction][flow][0]['eth_src']])
+                # print(self.mac_to_ip[self.device_flows[device][flow_direction][flow][0]['eth_dst']])
 
     def plot_device_flow(self, device):
         from TraceFiltering import PktDirection
@@ -150,7 +173,7 @@ class NetworkTrace:
         plt.savefig("tpplug.png")
         plt.show()
 
-    def sort_flow(self, flow_tuple, packet_data, flow_direction):
+    def sort_flow(self, flow_tuple, packet_data, flow_direction, protocol):
         """
             1. Function only sorts IoT device traffic flows
             2. First check is for output traffic flow => if device is src
@@ -158,21 +181,27 @@ class NetworkTrace:
         """
         # print(self.device_flows)
         try:
+            # print("src ip in src mac key", flow_tuple[0] in self.mac_to_ip[packet_data['eth_src']])
+            # print("dst ip in dst mac key", flow_tuple[1] in self.mac_to_ip[packet_data['eth_dst']])
             assert flow_tuple[0] in self.mac_to_ip[packet_data['eth_src']]
             assert flow_tuple[1] in self.mac_to_ip[packet_data['eth_dst']]
         except AssertionError as e:
-            logging.info("src or dst ip not in mac_to_ip dictionary")
+            # logging.info("src or dst ip not in mac_to_ip dictionary")
             print("Assertion Error", packet_data['ordinal'])
 
         if flow_direction == "outgoing":
-            if flow_tuple in self.device_flows[packet_data['eth_src']]['outgoing']:
-                self.device_flows[packet_data['eth_src']]['outgoing'][flow_tuple].append(packet_data)
-            else:
-                self.device_flows[packet_data['eth_src']]['outgoing'][flow_tuple] = []
-                self.device_flows[packet_data['eth_src']]['outgoing'][flow_tuple].append(packet_data)
+            # print(flow_tuple)
+            # print(packet_data)
+            if flow_tuple[0] == packet_data['ip_src'] and flow_tuple[2] == packet_data[protocol]['src_port']:
+                if flow_tuple in self.device_flows[packet_data['eth_src']]['outgoing']:
+                    self.device_flows[packet_data['eth_src']]['outgoing'][flow_tuple].append(packet_data)
+                else:
+                    self.device_flows[packet_data['eth_src']]['outgoing'][flow_tuple] = []
+                    self.device_flows[packet_data['eth_src']]['outgoing'][flow_tuple].append(packet_data)
         elif flow_direction == "incoming":
-            if flow_tuple in self.device_flows[packet_data['eth_dst']]['incoming']:
-                self.device_flows[packet_data['eth_dst']]['incoming'][flow_tuple].append(packet_data)
-            else:
-                self.device_flows[packet_data['eth_dst']]['incoming'][flow_tuple] = []
-                self.device_flows[packet_data['eth_dst']]['incoming'][flow_tuple].append(packet_data)
+            if flow_tuple[1] == packet_data['ip_dst'] and flow_tuple[3] == packet_data[protocol]['dst_port']:
+                if flow_tuple in self.device_flows[packet_data['eth_dst']]['incoming']:
+                    self.device_flows[packet_data['eth_dst']]['incoming'][flow_tuple].append(packet_data)
+                else:
+                    self.device_flows[packet_data['eth_dst']]['incoming'][flow_tuple] = []
+                    self.device_flows[packet_data['eth_dst']]['incoming'][flow_tuple].append(packet_data)
