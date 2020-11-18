@@ -28,8 +28,9 @@ def main():
     thread = threading.Thread(target=analyse_pcap(pcap_file, "16-09-23.pcap"))
     thread.start()
     thread.join()
-    dropcam = DeviceProfile("Dropcam", "30:8c:fb:2f:e4:b2", pcap_file.mac_to_ip["30:8c:fb:2f:e4:b2"])
-    dropcam.update_profile(pcap_file.device_flows["30:8c:fb:2f:e4:b2"])
+    # dropcam = DeviceProfile("Dropcam", "30:8c:fb:2f:e4:b2", pcap_file.mac_to_ip["30:8c:fb:2f:e4:b2"])
+    # dropcam.update_profile(pcap_file.device_flows["30:8c:fb:2f:e4:b2"])
+    create_device_plots(pcap_file)
     # print("waited for filtering")
     # shelve_network_trace(pcap_file, pcap_file.file_name[0:-5]+"-db")
 
