@@ -7,7 +7,10 @@ import logging
 
 class NetworkTrace:
     def __init__(self, trace_file):
-        self.file_name = trace_file
+        if len(str(trace_file)) > 20:
+            self.file_name = str(trace_file)[-13:-5]
+        else:
+            self.file_name = trace_file
         self.mac_to_ip = {}  #Aim is to map device to its IP addresses. A device may have multiple IPs but only one MAC
 
         ## Reference: UNSW IoT traffic profile dataset, the information for mac address found at: https://iotanalytics.unsw.edu.au/resources/List_Of_Devices.txt
