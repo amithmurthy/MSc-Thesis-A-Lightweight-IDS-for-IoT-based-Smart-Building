@@ -18,7 +18,7 @@ from tools import *
 
 
 """Gloabl variables"""
-count_limit = True
+count_limit = False
 device_filter = False
 
 class PktDirection(Enum):
@@ -37,7 +37,7 @@ def analyse_pcap(NetworkTraffic, file):
     # Count limit is to limit processing for testing logic
     if count_limit is True:
         # No of packets to process
-        limit = 100
+        limit = 100000
     else:
         limit = math.inf
     count = 0
@@ -57,11 +57,9 @@ def analyse_pcap(NetworkTraffic, file):
             # if device_filter is True:
             #     if ether_pkt.src != device_id and str(ether_pkt.dst) != device_id:
             #         continue
-
             if count == 1:
                 first_pkt_time, relative_ts = get_timestamp(pkt_metadata, count)
                 packet_data['relative_timestamp'] = relative_ts
-                print(first_pkt_time)
             else:
                 packet_data['relative_timestamp'] = get_timestamp(pkt_metadata, count, first_pkt_time)
 
@@ -81,7 +79,8 @@ def analyse_pcap(NetworkTraffic, file):
                     ipv = 4
                     if ip_pkt.fields == "MF" or ip_pkt.frag != 0:
                         # ip_pkt = ether_pkt[IPv6ExtHdrFragment]
-                        print("IPv4 packet fragmentation")
+                        continue
+                        # print("IPv4 packet fragmentation")
             # else:
             #     non_ip_packets.append(ether_pkt)
             else:
@@ -129,11 +128,11 @@ def analyse_pcap(NetworkTraffic, file):
                     src_port = packet_data['udp_data']['src_port']
                     dst_port = packet_data['udp_data']['dst_port']
                     protocol = "udp_data"
-                    if DNS in ip_pkt:
-                        dns_pkt = ip_pkt[DNS]
-                        if dns_pkt.qr == 0:
-                            domain_queried = dns_pkt.qd.qname
-                            packet_data["dns_query"] = domain_queried
+                    # if DNS in ip_pkt:
+                    #     dns_pkt = ip_pkt[DNS]
+                    #     if dns_pkt.qr == 0:
+                    #         domain_queried = dns_pkt.qd.qname
+                    #         packet_data["dns_query"] = domain_queried
                             # print(domain_queried)
                     """ 
                             elif DNSRR in dns_pkt:
@@ -162,11 +161,11 @@ def analyse_pcap(NetworkTraffic, file):
                 # if flow_tuple != ('192.168.1.106', '52.87.241.159', 46330, 443, "TCP"):
                 #     continue
 
-                if flow_tuple in NetworkTraffic.flow_table:
-                    NetworkTraffic.flow_table[flow_tuple].append(packet_data)
-                else:
-                    NetworkTraffic.flow_table[flow_tuple] = []
-                    NetworkTraffic.flow_table[flow_tuple].append(packet_data)
+                # if flow_tuple in NetworkTraffic.flow_table:
+                #     NetworkTraffic.flow_table[flow_tuple].append(packet_data)
+                # else:
+                #     NetworkTraffic.flow_table[flow_tuple] = []
+                #     NetworkTraffic.flow_table[flow_tuple].append(packet_data)
                 """
                             Appending packet_data to device_traffic dictionary 
                 """
@@ -197,7 +196,10 @@ def analyse_pcap(NetworkTraffic, file):
                     NetworkTraffic.local_device_traffic[ether_pkt.src].append(packet_data)
                 if ether_pkt.dst in NetworkTraffic.local_device_traffic:
                     NetworkTraffic.local_device_traffic[ether_pkt.dst].append(packet_data)
-
+                if count % 10000 == 0:
+                    print(count)
+        else:
+            break
     print("Finished", NetworkTraffic.file_name)
 
 
@@ -295,14 +297,14 @@ def get_pkt_direction(NetworkTraffic, ether_pkt):
 
 def shelve_network_info(NetworkTraffic, file_name):
     ar = kl.archives.dir_archive(name=file_name, serialized=True, cached=True, protocol=4)
-
-    ar['mac_to_ip'] = NetworkTraffic.mac_to_ip
-    ar.dump()
-    ar.clear()
-    ar['internet_traffic'] = NetworkTraffic.internet_traffic
-    ar.dump()
-    ar.clear()
-    ar['local_traffic'] = NetworkTraffic.local_device_traffic
+    try:
+        ar['mac_to_ip'] = NetworkTraffic.mac_to_ip
+        ar.dump()
+        ar.clear()
+    # ar['internet_traffic'] = NetworkTraffic.internet_traffic
+    except MemoryError:
+        pass
+    # ar['local_traffic'] = NetworkTraffic.local_device_traffic
 
 def shelve_device_traffic(device_object, file_out):
 
@@ -328,15 +330,17 @@ def shelve_device_traffic(device_object, file_out):
         ar['mac_addr'] = device_object.mac_address
         ar['ip_addrs'] = device_object.ip_addrs
         ar.dump()
-
     except MemoryError:
         #dictionary is too large; half the dict and pickle separately
-        match = re.IGNORECASE(r'gateway', device_object.device_name)
-        if match:
+        if device_object.device_name == "TPLink Router Bridge LAN (Gateway)":
             pass
         print(device_object.device_name + " dict too large")
-        def modularise():
-            dict1, dict2 = halve_dict(device_object.flows)
+        def modularise(rec_dict=None, iteration=0):
+            iteration += 1
+            if rec_dict is None:
+                dict1, dict2 = halve_dict(device_object.flows)
+            else:
+                dict1, dict2 = halve_dict(rec_dict)
             try:
                 ar['device_traffic_1'] = dict1
                 ar.dump()
@@ -345,16 +349,11 @@ def shelve_device_traffic(device_object, file_out):
                 ar.dump()
                 ar.clear()
             except MemoryError:
+                print("iteration:", iteration)
                 print(device_object.device_name + " dictionaries still too big - being modularised")
-                # modularise()
+                modularise(dict1, iteration)
+                modularise(dict2, iteration)
 
-
-def unpickle_file(file_in):
-    with shelve.open(file_in, 'r') as shelf:
-        NetworkTrafic = NetworkTrace([shelf['file']])
-        NetworkTrafic.device_flows = shelf['network_device_flows']
-        NetworkTrafic.device_traffic = shelf['network_device_traffic']
-    return NetworkTrafic
 
 def check_flows(NetworkTraffic):
     for value in NetworkTraffic.iot_devices.values():

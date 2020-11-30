@@ -26,7 +26,7 @@ class DeviceProfile:
         self.device_activity = None
         self.flows = traffic
 
-    def update_profile(self, flows, malicious_pkts, benign_pkts):
+    def update_profile(self, malicious_pkts, benign_pkts):
         # self.port_profile(device_traffic)
         tick = 500
         # for flow_direction in flows:
@@ -49,7 +49,7 @@ class DeviceProfile:
                                         "pkt count": None,
                                          "flow type": None
                                         } for flow in self.flows['outgoing']}
-        self.all_flow_tuples = [*list(flows["incoming"].keys()), *list(flows["outgoing"].keys())]
+        self.all_flow_tuples = [*list(self.flows["incoming"].keys()), *list(self.flows["outgoing"].keys())]
         self.set_device_activity( tick)
         print(self.device_name)
         self.compute_flow_attributes(tick, malicious_pkts, benign_pkts)

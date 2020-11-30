@@ -57,7 +57,7 @@ class NetworkTrace:
         self.device_traffic = {addr: [] for addr in self.keys_list}  # Key is the device mac address and values are list of packets (dictionaries)
         self.local_device_traffic = {i: [] for i in self.non_iot_addr}
         self.internet_traffic = {}
-        self.flow_table = {}
+        # self.flow_table = {}
         self.device_flows = {addr: {'incoming': OrderedDict(), 'outgoing': OrderedDict()} for addr in self.keys_list}
         self.device_flow_stats = {addr: {'incoming': {}, 'outgoing': {}} for addr in self.keys_list}
         # logging.basicConfig(filename=self.file_name[0:-5]+"log", level=logging.DEBUG)
