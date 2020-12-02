@@ -318,7 +318,6 @@ def shelve_device_traffic(device_object, file_out):
 
     ar = kl.archives.dir_archive(name=file_out, serialized=True, cached=True,protocol=4)
 
-    iteration = 1
     # add device flows to memory cache
     try:
         ar['device_traffic'] = device_object.flows
@@ -336,7 +335,7 @@ def shelve_device_traffic(device_object, file_out):
             pass
         print(device_object.device_name + " dict too large")
         def modularise(rec_dict=None, iteration=0):
-            iteration += 1
+
             if rec_dict is None:
                 dict1, dict2 = halve_dict(device_object.flows)
             else:
@@ -349,11 +348,10 @@ def shelve_device_traffic(device_object, file_out):
                 ar.dump()
                 ar.clear()
             except MemoryError:
-                print("iteration:", iteration)
+                # print("iteration:", iteration)
                 print(device_object.device_name + " dictionaries still too big - being modularised")
                 modularise(dict1, iteration)
                 modularise(dict2, iteration)
-
 
 def check_flows(NetworkTraffic):
     for value in NetworkTraffic.iot_devices.values():

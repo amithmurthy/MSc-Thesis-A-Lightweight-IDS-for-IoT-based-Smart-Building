@@ -50,12 +50,12 @@ class DeviceProfile:
                                          "flow type": None
                                         } for flow in self.flows['outgoing']}
         self.all_flow_tuples = [*list(self.flows["incoming"].keys()), *list(self.flows["outgoing"].keys())]
-        self.set_device_activity( tick)
-        print(self.device_name)
+        self.set_device_activity(tick)
+        # print(self.device_name)
         self.compute_flow_attributes(tick, malicious_pkts, benign_pkts)
-        self.plot_device_traffic()
-        self.compare_flow_direction_rate(True)
-        self.plot_flow_type()
+        # self.plot_device_traffic()
+        # self.compare_flow_direction_rate(True)
+        # self.plot_flow_type()
         # self.get_flow_pairs(flows)
 
     def port_profile(self, device_traffic):
@@ -108,9 +108,9 @@ class DeviceProfile:
                 if len(self.flows[flow_direction][flow]) > 1:
                     start = self.flows[flow_direction][flow][0]['relative_timestamp'].total_seconds()
                     end = self.flows[flow_direction][flow][-1]['relative_timestamp'].total_seconds()
-                    duration = end - start
+                    duration = abs(end - start)
                 else:
-                    duration = self.flows[flow_direction][flow][0]['relative_timestamp'].total_seconds()
+                    duration = abs(self.flows[flow_direction][flow][0]['relative_timestamp'].total_seconds())
                 # self.flow_rate[flow] = {key: 0 for key in range(0, int(duration)+1, 10)}
                 pkt_count = 0
                 flow_size = 0
@@ -136,10 +136,14 @@ class DeviceProfile:
                     for i in range(0, int(duration) + 1, tick):
                         # print(pkt['relative_timestamp'].total_seconds())
                         if i <= pkt_ts < i + 1:
-                            self.device_activity[i] += payload
                             # self.flow_rate[flow][i] += payload
-                            self.flow_direction_rate[flow_direction][i][0] += 1
-                            self.flow_direction_rate[flow_direction][i][1] += payload
+                            try:
+                                assert i <= int(duration)
+                                self.device_activity[i] += payload
+                                self.flow_direction_rate[flow_direction][i][0] += 1
+                                self.flow_direction_rate[flow_direction][i][1] += payload
+                            except KeyError or AssertionError:
+                                pass
                     pkt_count += 1
 
                 avg_pkt_size = flow_size / pkt_count
@@ -194,6 +198,7 @@ class DeviceProfile:
                     self.output_flow_stats[flow]["jitter"] = inter_pkt_arrival
                     self.output_flow_stats[flow]['pkt count'] = pkt_count
                     self.output_flow_stats[flow]['flow type'] = flow_type
+
                     # if flow[-1] == "TCP":
                     #     avg_tcp_output_pkt_size.append(avg_pkt_size)
                     #     output_tcp_flow_duration.append(duration)
@@ -289,7 +294,6 @@ class DeviceProfile:
         plt.show()
 
     def get_flow_pairs(self, flows):
-
         related_flows = []
         for input in list(flows["incoming"].keys()):
             for output in list(flows["outgoing"].keys()):
@@ -298,6 +302,11 @@ class DeviceProfile:
                     self.flow_pairs.append((input, output))
 
     def plot_pairs(self, input, output):
+        """
+        :param input: input, output flow direction traffic
+        :param output: plots traffic of bidirectional flow according to direction
+        :return:
+        """
         fig = plt.figure()
         ax = fig.add_subplot(1, 1, 1)
         input_time = list(self.flow_rate[input].keys())
@@ -344,9 +353,8 @@ class DeviceProfile:
         ax2.set_ylabel("Avg jitter of packets (seconds)")
         fig2.legend('best')
         plt.savefig(self.device_name+"jitter_of_flow_direction.png")
-        self.plot_byte_rate()
 
-    def plot_byte_rate(self):
+    def plot_flow_pair_byte_rate(self):
         fig = plt.figure()
         ax = fig.add_subplot(1, 1, 1)
         in_byte = []
@@ -408,10 +416,13 @@ class DeviceProfile:
         duration = last_pkt_time - first_pkt_time
         self.device_activity = {key: 0 for key in range(0, int(duration) +1, tick)}
 
-    def plot_device_traffic(self):
+    def plot_device_traffic(self, x=None, y=None):
         fig = plt.figure()
         ax = fig.add_subplot(1, 1, 1)
-        ax.plot(list(self.device_activity.keys()), list(self.device_activity.values()), color='b')
+        if x is None and y is None:
+            ax.plot(list(self.device_activity.keys()), list(self.device_activity.values()), color='b')
+        else:
+            ax.plot(x, y, color='k')
         ax.set_ylabel("Rate (Bytes/sec)")
         ax.set_xlabel("Time (s)")
         plt.savefig(self.device_name+"traffic.png")
@@ -426,7 +437,7 @@ class DeviceProfile:
         for flow in self.input_flow_stats:
             flow_size = self.input_flow_stats[flow]['size']
             duration = self.input_flow_stats[flow]['duration']
-            print(self.input_flow_stats[flow]['flow type'])
+            # print(self.input_flow_stats[flow]['flow type'])
             if self.input_flow_stats[flow]['flow type'] == 'malicious':
                 mal_size.append(flow_size)
                 mal_time.append(duration)
@@ -436,19 +447,23 @@ class DeviceProfile:
         for flow in self.output_flow_stats:
             flow_size = self.output_flow_stats[flow]['size']
             duration = self.output_flow_stats[flow]['duration']
-            print(self.output_flow_stats[flow]['flow type'])
+            # print(self.output_flow_stats[flow]['flow type'])
             if self.output_flow_stats[flow]['flow type'] == 'malicious':
                 mal_size.append(flow_size)
                 mal_time.append(duration)
             else:
                 size.append(flow_size)
                 time.append(duration)
+        t=[]
+        for value in time:
+            t.append(value/3600)
+        # for value in mal_time:
 
         fig = plt.figure()
         ax = fig.add_subplot(1, 1, 1)
-        ax.scatter(time, size, color = 'g',label='Benign Traffic')
-        ax.scatter(mal_time, mal_size, color='k', label='Malicious Traffic')
-        ax.set_xlabel("Flow duration (seconds)")
-        ax.set_ylabel("Flow size (Bytes)")
+        ax.scatter(t, size, color = 'g',label='Benign Traffic')
+        # ax.scatter(mal_time, mal_size, color='k', label='Malicious Traffic')
+        ax.set_xlabel("Flow duration (hours)")
+        ax.set_ylabel("Flow size (bytes)")
         plt.legend(loc='best')
         plt.savefig(self.device_name+"traffictypes.png")

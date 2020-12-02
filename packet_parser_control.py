@@ -4,6 +4,7 @@ from trace_filtering import *
 from network import NetworkTrace
 import threading
 from pathlib import Path
+from flow_stats import *
 """
 This file controls the filtering and analysis process 
 
@@ -27,12 +28,21 @@ def get_pcaps(dataset):
     # print(file_count)
     # return file_list
 
-def analyse_dataset():
-    for file in get_pcaps():
-        traffic = NetworkTrace(file)
+def analyse_dataset(dataset, save_path,malicious_pkts,benign_pkts):
+    large_attack_files = ["18-06-01", "18-06-02", "18-06-03", "18-06-04", "18-06-05"]
+    processed_files = ["16-09-23", "16-09-24", "16-09-25", "16-09-26", "16-09-27", "16-09-28"]
 
-def unpack_device_traffic(path,device):
-    device_obj = unpickle_objects(path, device)
+    for file in get_pcaps(dataset):
+        print(file)
+        if str(file)[-13:-5] in large_attack_files:
+            continue
+        traffic_file = NetworkTrace(file)
+        analyse_pcap(traffic_file, FileIO(file))
+        print("creating device objects")
+        devices = get_device_objects(traffic_file, malicious_pkts, benign_pkts)
+        print("saving traffic")
+        save_traffic(traffic_file, save_path, devices)
+        processed_files.append(str(file)[-13:-5])
 
 def main():
     # parse_dataset()
@@ -54,20 +64,10 @@ def main():
     attack_file_path = r"C:\Users\amith\Documents\Uni\Masters\processed-traffic\Attack"
     benign_file_path = r"C:\Users\amith\Documents\Uni\Masters\processed-traffic\Benign"
     dataset1_file_path = r"C:\Users\amith\Documents\Uni\Masters\processed-traffic\2016"
-    large_attack_files = ["18-06-01", "18-06-02", "18-06-03", "18-06-04", "18-06-05", "18-06-06", "18-06-07"]
-    processed_files = ["16-09-23","16-09-24", "16-09-25", "16-09-26", "16-09-27", "16-09-28"]
-    unpack_device_traffic(dataset1_file_path, "TP-Link Smart plug")
-    # for file in get_pcaps(dataset1):
-    #     print(file)
-    #     if str(file)[-13:-5] in processed_files:
-    #         continue
-    #     traffic_file = NetworkTrace(file)
-    #     analyse_pcap(traffic_file, FileIO(file))
-    #     print("creating device objects")
-    #     devices = get_device_objects(traffic_file, malicious_pkts, benign_pkts)
-    #     print("saving traffic")
-    #     save_traffic(traffic_file, dataset1_file_path, devices)
-    #     processed_files.append(str(file)[-13:-5])
+
+    # analyse_dataset(attack_dataset, attack_file_path, malicious_pkts, benign_pkts)
+    dropcam = unpickle_objects(dataset1_file_path, "Dropcam")
+    model_device_behaviour(dropcam)
 
     # pcap_file = NetworkTrace(test_file)
     # analyse_pcap(pcap_file, "16-09-23.pcap")
@@ -84,6 +84,11 @@ if __name__ == "__main__":
             "Blipcare Blood Pressure meter", "Withings Aura smart sleep sensor", "Light Bulbs LiFX Smart Bulb",
             "Triby Speaker", "PIX-STAR Photo-frame",
             "HP Printer", "Samsung Galaxy Tab", "Nest Dropcam", "TPLink Router Bridge LAN (Gateway)"]
+    # for device in iot:
+    #     path = r"C:\Users\amith\Documents\Uni\Masters\Implementation\plots"
+    #     path = path +"\_" + device
+    #     folder = Path(path)
+    #     folder.mkdir()
     main()
 
     # thread1 = threading.Thread(target= save_traffic(pcap_file, file_path, devices))

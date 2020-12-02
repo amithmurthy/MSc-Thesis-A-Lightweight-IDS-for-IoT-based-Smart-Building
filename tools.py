@@ -2,6 +2,7 @@ from pathlib import Path
 import trace_filtering
 import klepto as kl
 from device import DeviceProfile
+import math
 
 def halve_dict(large_dict):
     large_dict = large_dict
@@ -26,19 +27,26 @@ def unpickle_objects(file_path, device_filter):
     path = file_path
     database = Path(path)
     import re
-    # device_objects = []
-    for file in database.rglob(""):
-        print(file)
-        file_name = re.search('_(.+?)-db', file.name)
-        if file_name:
-            device_name = file_name.group(1)
-            if device_name == device_filter:
-                print(device_name)
-                device_obj = open_archive(path+'\_'+device_name+'-db')
-                # device_objects.append(device_obj)
-    return device_obj
+    device_objects = []
+    count = 0
+    limit =  math.inf #This is for logic testing purposes  math.inf
+    for network_trace in database.iterdir():
+        count += 1
+        if count > limit:
+            break
+        for device_folder in network_trace.iterdir():
+            # print(device_folder)
+            file_name = re.search('_(.+?)-db', device_folder.name)
+            if file_name:
+                device_name = file_name.group(1)
+                if device_name == device_filter:
+                    device_obj = open_archive(path+'\_'+str(network_trace)[-8:]+'\_'+device_name+'-db')
+                    device_objects.append(device_obj)
+
+    return device_objects
 
 def open_archive(directory):
+    # print(directory)
     d = kl.archives.dir_archive(name=directory, serialized = True)
     # print(d.archive._keydict())
     d.load('ip_addrs')
@@ -48,8 +56,7 @@ def open_archive(directory):
     d.load('device_name')
     return DeviceProfile(d['device_name'], d['mac_addr'], d['ip_addrs'], d['device_traffic'])
 
-
-
 def create_device_plots(devices, malicious_pkts, benign_pkts):
+
     for device in devices:
         device.update_profile(malicious_pkts, benign_pkts)
