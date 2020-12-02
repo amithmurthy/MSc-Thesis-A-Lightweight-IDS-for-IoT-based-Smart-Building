@@ -12,6 +12,14 @@ This file controls the filtering and analysis process
 2. Control the graphs plotted
 Parse packets and then pickle network object
 """
+iot = ["Smart Things", "Amazon Echo", "Netatmo Welcom", "TP-Link Day Night Cloud camera", "Samsung SmartCam", "Dropcam",
+            "Insteon Camera", "Withings Smart Baby Monitor",
+            "Belkin Wemo switch", "TP-Link Smart plug", "iHome", "Belkin wemo motion sensor", "NEST Protect smoke alarm",
+            "Netatmo weather station", "Withings Smart scale",
+            "Blipcare Blood Pressure meter", "Withings Aura smart sleep sensor", "Light Bulbs LiFX Smart Bulb",
+            "Triby Speaker", "PIX-STAR Photo-frame",
+            "HP Printer", "Samsung Galaxy Tab", "Nest Dropcam", "TPLink Router Bridge LAN (Gateway)"]
+
 
 def get_pcaps(dataset):
 
@@ -55,19 +63,31 @@ def main():
     malicious_pkts = []
     benign_pkts = []
     pkt_rmse = []
-    with open('results.pickle', 'rb') as pickle_fd:
-        phi = pickle.load(pickle_fd)
-        malicious_pkts = pickle.load(pickle_fd)
-        benign_pkts = pickle.load(pickle_fd)
-        pkt_rmse = pickle.load(pickle_fd)
+    # with open('results.pickle', 'rb') as pickle_fd:
+    #     phi = pickle.load(pickle_fd)
+    #     malicious_pkts = pickle.load(pickle_fd)
+    #     benign_pkts = pickle.load(pickle_fd)
+    #     pkt_rmse = pickle.load(pickle_fd)
 
     attack_file_path = r"C:\Users\amith\Documents\Uni\Masters\processed-traffic\Attack"
     benign_file_path = r"C:\Users\amith\Documents\Uni\Masters\processed-traffic\Benign"
     dataset1_file_path = r"C:\Users\amith\Documents\Uni\Masters\processed-traffic\2016"
 
     # analyse_dataset(attack_dataset, attack_file_path, malicious_pkts, benign_pkts)
-    dropcam = unpickle_objects(dataset1_file_path, "Dropcam")
-    model_device_behaviour(dropcam)
+    processed = ["Dropcam", "Smart Things"]
+    # for device in iot:
+    #     if device not in processed:
+    #         x = unpickle_objects(dataset1_file_path, device)
+    #         make_graphs = model_device_behaviour(x)
+    #         if make_graphs:
+    #             print(make_graphs)
+    #     else:
+    #         continue
+
+    nest = unpickle_objects(dataset1_file_path, "Nest Dropcam")
+    print(nest)
+    model_device_behaviour(nest)
+
 
     # pcap_file = NetworkTrace(test_file)
     # analyse_pcap(pcap_file, "16-09-23.pcap")
@@ -77,13 +97,8 @@ def main():
 
 
 if __name__ == "__main__":
-    iot = ["Smart Things", "Amazon Echo", "Netatmo Welcom", "TP-Link Day Night Cloud camera", "Samsung SmartCam", "Dropcam",
-            "Insteon Camera", "Withings Smart Baby Monitor",
-            "Belkin Wemo switch", "TP-Link Smart plug", "iHome", "Belkin wemo motion sensor", "NEST Protect smoke alarm",
-            "Netatmo weather station", "Withings Smart scale",
-            "Blipcare Blood Pressure meter", "Withings Aura smart sleep sensor", "Light Bulbs LiFX Smart Bulb",
-            "Triby Speaker", "PIX-STAR Photo-frame",
-            "HP Printer", "Samsung Galaxy Tab", "Nest Dropcam", "TPLink Router Bridge LAN (Gateway)"]
+
+
     # for device in iot:
     #     path = r"C:\Users\amith\Documents\Uni\Masters\Implementation\plots"
     #     path = path +"\_" + device

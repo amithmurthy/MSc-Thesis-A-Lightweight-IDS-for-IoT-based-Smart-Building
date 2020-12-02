@@ -45,6 +45,7 @@ def model_device_behaviour(device_trafic_objects):
     plot_flow_direction(time, input_traffic_size, output_traffic_size,"size", file_name)
     plot_flow_direction(time, in_flows, out_flows, "flows", file_name)
     plot_input_flow_graph(time, input_traffic_size, file_name)
+    return device_name + "done"
 
 def get_avg_input_stats(device_obj):
     # rates = []
