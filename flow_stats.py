@@ -5,7 +5,7 @@ This module is for calculating stats on Device objects
 """
 
 
-def model_device_behaviour(device_trafic_objects):
+def model_device_behaviour(device_trafic_objects, mal_flows):
     avg_input_rate = []
     avg_output_rate = []
     avg_input_pkt_rate = []
@@ -17,6 +17,8 @@ def model_device_behaviour(device_trafic_objects):
     in_flows = []
     out_flows = []
     days = 0
+    malicious_flows = mal_flows
+
     for device_obj in device_trafic_objects:
         days += 1
         total_traffic = 0
@@ -37,7 +39,8 @@ def model_device_behaviour(device_trafic_objects):
         time.append(days)
 
     device_name = device_trafic_objects[0].device_name
-    file_name = "plots/_" + device_name
+    # file_name = "plots/_" + device_name
+    file_name = "attack/_" + device_name
     plot(time, total_traffic_size, file_name)
 
     plot_flow_direction(time, avg_input_rate, avg_output_rate, "byte_rate", file_name)
@@ -47,20 +50,29 @@ def model_device_behaviour(device_trafic_objects):
     plot_input_flow_graph(time, input_traffic_size, file_name)
     return device_name + "done"
 
-def get_avg_input_stats(device_obj):
+def get_avg_input_stats(device_obj, mal_flows):
     # rates = []
     rate = 0
     pkt_rate = 0
     size = 0
+    benign_flow_sizes = []
+    benign_flow_duration = []
     # duration = 0
     flows = 0
+    mal_flow_sizes = []
+    mal_flow_duration = []
     for flow in device_obj.input_flow_stats:
-
-        rate += device_obj.input_flow_stats[flow]['byte rate']
-        pkt_rate += device_obj.input_flow_stats[flow]["pkt rate"]
-        # rates.append(device_obj.input_flow_stats[flow]['byte rate'])
-        # duration += device_obj.input_flow_stats[flow]['duration']
-        size += device_obj.input_flow_stats[flow]["size"]
+        if flow not in mal_flows:
+            rate += device_obj.input_flow_stats[flow]['byte rate']
+            pkt_rate += device_obj.input_flow_stats[flow]["pkt rate"]
+            # rates.append(device_obj.input_flow_stats[flow]['byte rate'])
+            # duration += device_obj.input_flow_stats[flow]['duration']
+            size += device_obj.input_flow_stats[flow]["size"]
+            benign_flow_sizes.append(device_obj.input_flow_stats[flow]['size'])
+            benign_flow_duration.append(device_obj.input_flow_stats[flow]['duration'])
+        elif flow in mal_flows:
+            mal_flow_sizes.append(device_obj.input_flow_stats[flow]['size'])
+            mal_flow_duration.append(device_obj.input_flow_stats[flow]['duration'])
         if device_obj.input_flow_stats[flow]['size'] > 0:
             flows += 1
             # print("in flow size over zero:", device_obj.input_flow_stats[flow]['size'])
@@ -72,28 +84,47 @@ def get_avg_input_stats(device_obj):
         "avg_rate": rate/flows,
         "pkt_rate": pkt_rate / flows,
         "flows": flows,
-        "size": size
+        "size": size,
+        "mal_flow_sizes": mal_flow_sizes,
+        "mal_flow_duration": mal_flow_duration,
+        "benign_flow_sizes": benign_flow_sizes,
+        "benign_flow_duration": benign_flow_duration
     }
     # print("flows:", flows, ", keys:", len(device_obj.input_flow_stats.keys()))
     # print("size method", (size/duration)/ flows)
 
-def get_avg_output_stats(device_obj):
+def get_avg_output_stats(device_obj, mal_flows):
     rate = 0
     flows =0
     pkt_rate = 0
     size = 0
+    benign_flow_sizes = []
+    benign_flow_duration = []
+    mal_flow_sizes = []
+    mal_flow_duration = []
     for flow in device_obj.output_flow_stats:
         flows += 1
-        pkt_rate += device_obj.output_flow_stats[flow]["pkt rate"]
-        rate += device_obj.output_flow_stats[flow]['byte rate']
-        size += device_obj.output_flow_stats[flow]["size"]
+        if flow not in mal_flows:
+            pkt_rate += device_obj.output_flow_stats[flow]["pkt rate"]
+            rate += device_obj.output_flow_stats[flow]['byte rate']
+            size += device_obj.output_flow_stats[flow]["size"]
+            benign_flow_sizes.append(device_obj.output_flow_stats[flow]['size'])
+            benign_flow_duration.append(device_obj.output_flow_stats[flow]['duration'])
+        elif flow in mal_flows:
+            mal_flow_sizes.append(device_obj.output_flow_stats[flow]['size'])
+            mal_flow_duration.append(device_obj.output_flow_stats[flow]['duration'])
 
     return {
         "avg_rate": rate / flows,
         "pkt_rate": pkt_rate / flows,
         "flows": flows,
-        "size": size
+        "size": size,
+        "mal_flow_sizes": mal_flow_sizes,
+        "mal_flow_duration": mal_flow_duration,
+        "benign_flow_sizes": benign_flow_sizes,
+        "benign_flow_duration": benign_flow_duration
     }
+
 
 def plot(x,y, file_name):
     fig = plt.figure()

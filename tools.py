@@ -3,6 +3,7 @@ import trace_filtering
 import klepto as kl
 from device import DeviceProfile
 import math
+import time
 
 def halve_dict(large_dict):
     large_dict = large_dict
@@ -30,6 +31,7 @@ def unpickle_objects(file_path, device_filter):
     device_objects = []
     count = 0
     limit =  math.inf #This is for logic testing purposes  math.inf
+    files = []
     for network_trace in database.iterdir():
         count += 1
         if count > limit:
@@ -40,10 +42,10 @@ def unpickle_objects(file_path, device_filter):
             if file_name:
                 device_name = file_name.group(1)
                 if device_name == device_filter:
+                    files.append("20" + str(network_trace)[-8:])
                     device_obj = open_archive(path+'\_'+str(network_trace)[-8:]+'\_'+device_name+'-db')
                     device_objects.append(device_obj)
-
-    return device_objects
+    return device_objects, files
 
 def open_archive(directory):
     # print(directory)
@@ -60,3 +62,30 @@ def create_device_plots(devices, malicious_pkts, benign_pkts):
 
     for device in devices:
         device.update_profile(malicious_pkts, benign_pkts)
+
+def get_malicious_flows(folder_path):
+    folder = Path(folder_path)
+
+    malicious_flows = {}
+
+
+    for file in folder.iterdir():
+        if "packet" in file.name:
+            with open(file, 'r') as txtfile:
+                # mylist = [line.rstrip('\n') for line in txtfile]
+                # line = txtfile.readline()
+                # print(file.name)
+                for line in txtfile:
+                    elements = line.split(',')
+                    proto = None
+                    if elements[6] == '6':
+                        proto = "TCP"
+                    elif elements[6] == '17':
+                        proto = "UDP"
+                    date = time.strftime('%Y-%m-%d', time.localtime(int(elements[0])/1000))
+                    if date in malicious_flows:
+                        malicious_flows[date].append((elements[4], elements[5], elements[7], elements[8], proto))
+                    else:
+                        malicious_flows[date] = []
+                        malicious_flows[date].append((elements[4], elements[5], elements[7], elements[8], proto))
+    return malicious_flows

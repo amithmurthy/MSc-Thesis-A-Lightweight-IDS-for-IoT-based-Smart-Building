@@ -20,6 +20,8 @@ iot = ["Smart Things", "Amazon Echo", "Netatmo Welcom", "TP-Link Day Night Cloud
             "Triby Speaker", "PIX-STAR Photo-frame",
             "HP Printer", "Samsung Galaxy Tab", "Nest Dropcam", "TPLink Router Bridge LAN (Gateway)"]
 
+infected_devices = ["Belkin wemo motion sensor", "Belkin Wemo switch", "Samsung SmartCam", "Light Bulbs LiFX Smart Bulb","TP-Link Smart plug", "Netatmo Welcom",
+                    "Amazon Echo", "iHome"]
 
 def get_pcaps(dataset):
 
@@ -83,11 +85,20 @@ def main():
     #             print(make_graphs)
     #     else:
     #         continue
-
-    nest = unpickle_objects(dataset1_file_path, "Nest Dropcam")
-    print(nest)
-    model_device_behaviour(nest)
-
+    malicious_flows = get_malicious_flows(r"C:\Users\amith\Documents\Uni\Masters\Datasets\UNSW\2018\annotations\annotations")
+    # dates = ["2018-06-01","2018-06-02", "2018-06-03", "2018-06-04","2018-06-06", "2018-06-07","2018-06-08"]
+    mal_keys = list(malicious_flows.keys())
+    for device in infected_devices:
+        traffic_objects, dates = unpickle_objects(attack_file_path, device)
+        for date in dates:
+            if date in mal_keys:
+                make_graphs = model_device_behaviour(traffic_objects, malicious_flows[date])
+            else:
+                continue
+        # print(traffic_objects)
+        # print(dates)
+        # print(len(traffic_objects))
+        # print(len(dates))
 
     # pcap_file = NetworkTrace(test_file)
     # analyse_pcap(pcap_file, "16-09-23.pcap")
@@ -99,8 +110,8 @@ def main():
 if __name__ == "__main__":
 
 
-    # for device in iot:
-    #     path = r"C:\Users\amith\Documents\Uni\Masters\Implementation\plots"
+    # for device in infected_devices:
+    #     path = r"C:\Users\amith\Documents\Uni\Masters\Implementation\attack"
     #     path = path +"\_" + device
     #     folder = Path(path)
     #     folder.mkdir()
