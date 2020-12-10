@@ -23,6 +23,24 @@ iot = ["Smart Things", "Amazon Echo", "Netatmo Welcom", "TP-Link Day Night Cloud
 infected_devices = ["Belkin wemo motion sensor", "Belkin Wemo switch", "Samsung SmartCam", "Light Bulbs LiFX Smart Bulb","TP-Link Smart plug", "Netatmo Welcom",
                     "Amazon Echo", "iHome"]
 
+dataset_file_paths = {
+    "tplink-plug": r"D:\iot-data\uk\tplink-plug",
+    'ring-doorbell': r"D:\iot-data\uk\ring-doorbell"
+}
+device_events = {
+    "tplink-plug": {
+        'alexa_off': "2019-05-04_15_27_41.24s",
+        "alexa_on": "2019-04-28_15_52_32.23s",
+        "power": "2019-04-26_12_41_34.198s"},
+    "ring-doorbell": {
+        'alexa_stop': "2019-04-26_17_30_24.22s",
+        'alexa_watch': "2019-04-26_18_46_31.22s",
+        'local_move': "2019-04-26_15_52_31.101s",
+        'android_wan_watch': "2019-04-29_10_54_20.47s",
+        "android_lan_watch": "2019-04-28_15_44_57.47s",
+        'power': "2019-04-26_12_23_33.215s"}
+}
+
 def get_pcaps(dataset):
 
     dir_path = Path(dataset)
@@ -54,7 +72,26 @@ def analyse_dataset(dataset, save_path,malicious_pkts,benign_pkts):
         save_traffic(traffic_file, save_path, devices)
         processed_files.append(str(file)[-13:-5])
 
+def analyse_device_events(file_path, device):
+    files = Path(file_path)
+
+    for file in files.iterdir():
+        if file.name in device_events[device]:
+            # print(file.name)
+            for pcap in file.iterdir():
+                # print(pcap.name)
+                if pcap.name[0:-5] in device_events[device][file.name]:
+                    print("test")
+                    traffic_file = NetworkTrace(pcap)
+                    analyse_pcap(traffic_file, FileIO(pcap))
+                else:
+                    continue
+            else:
+                continue
+
 def main():
+    # analyse_device_events(dataset_file_paths['tplink-plug'], "tplink-plug")
+    # analyse_device_events(dataset_file_paths['ring-doorbell'], "ring-doorbell")
     # parse_dataset()
     dataset1 = r"C:\Users\amith\Documents\Uni\Masters\Datasets\UNSW\IoT Traces\Extracted"
     attack_dataset = r"C:\Users\amith\Documents\Uni\Masters\Datasets\UNSW\2018\Attack Data"
@@ -62,6 +99,8 @@ def main():
     # attack_file = "18-10-20.pcap"
     # benign_file = "18-10-29.pcap"
     # test_file = "16-09-23.pcap"
+    # pcap_file = NetworkTrace(test_file)
+    # analyse_pcap(pcap_file, "16-09-23.pcap")
     malicious_pkts = []
     benign_pkts = []
     pkt_rmse = []
@@ -76,39 +115,46 @@ def main():
     dataset1_file_path = r"C:\Users\amith\Documents\Uni\Masters\processed-traffic\2016"
 
     # analyse_dataset(attack_dataset, attack_file_path, malicious_pkts, benign_pkts)
-    processed = ["Dropcam", "Smart Things"]
-    # for device in iot:
-    #     if device not in processed:
-    #         x = unpickle_objects(dataset1_file_path, device)
-    #         make_graphs = model_device_behaviour(x)
+    processed = ["Dropcam", "Amazon Echo", "Netatmo Welcom", "TP-Link Day Night Cloud camera", "Samsung SmartCam"]
+    for device in iot:
+        if device == "iHome":
+            print(device)
+            x, dates = unpickle_objects(dataset1_file_path, device)
+            print(x)
+            make_graphs = model_device_behaviour(x,dates , mal_flows={})
+            if make_graphs:
+                print(make_graphs)
+        else:
+            continue
+    malicious_flows = get_malicious_flows(r"C:\Users\amith\Documents\Uni\Masters\Datasets\UNSW\2018\annotations\annotations")
+    dates = ["2018-06-01","2018-06-02", "2018-06-03", "2018-06-04","2018-06-06", "2018-06-07","2018-06-08"]
+    mal_keys = list(malicious_flows.keys())
+    # for device in infected_devices:
+    #     traffic_objects, dates = unpickle_objects(attack_file_path, device)
+    #     for date in dates:
+    #         # if date in mal_keys:
+    #         make_graphs = model_device_behaviour(traffic_objects, date, malicious_flows)
     #         if make_graphs:
     #             print(make_graphs)
-    #     else:
-    #         continue
-    malicious_flows = get_malicious_flows(r"C:\Users\amith\Documents\Uni\Masters\Datasets\UNSW\2018\annotations\annotations")
-    # dates = ["2018-06-01","2018-06-02", "2018-06-03", "2018-06-04","2018-06-06", "2018-06-07","2018-06-08"]
-    mal_keys = list(malicious_flows.keys())
-    for device in infected_devices:
-        traffic_objects, dates = unpickle_objects(attack_file_path, device)
-        for date in dates:
-            if date in mal_keys:
-                make_graphs = model_device_behaviour(traffic_objects, malicious_flows[date])
-            else:
-                continue
+    #             break
+    # traffic_objts, dates = unpickle_objects(dataset1_file_path, "Dropcam")
+    # for date in dates:
+    #     if date in mal_keys:
+    # print(len(traffic_objts))
+    # get_graphs = model_device_behaviour(traffic_objts, dates, malicious_flows)
+
         # print(traffic_objects)
         # print(dates)
         # print(len(traffic_objects))
         # print(len(dates))
 
-    # pcap_file = NetworkTrace(test_file)
-    # analyse_pcap(pcap_file, "16-09-23.pcap")
+
     # thread = threading.Thread(target=analyse_pcap(pcap_file, test_file))
     # thread.start()
     # thread.join()
 
 
 if __name__ == "__main__":
-
 
     # for device in infected_devices:
     #     path = r"C:\Users\amith\Documents\Uni\Masters\Implementation\attack"

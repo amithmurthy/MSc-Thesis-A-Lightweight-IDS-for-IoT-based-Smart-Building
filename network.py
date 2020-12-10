@@ -37,8 +37,8 @@ class NetworkTrace:
                        "HP Printer":"70:5a:0f:e4:9b:c0",
                        "Samsung Galaxy Tab":"08:21:ef:3b:fc:e3",
                        "Nest Dropcam":"30:8c:fb:b6:ea:45",
-                       "TPLink Router Bridge LAN (Gateway)":"14:cc:20:51:33:ea"
-                       }
+                       "TPLink Router Bridge LAN (Gateway)":"14:cc:20:51:33:ea"}
+        #"tplink-plug": "50:c7:bf:b1:d2:78"
         self.iot_mac_addr = self.iot_devices.values()
         self.non_iot = {
             "Android Phone": "40:f3:08:ff:1e:da",

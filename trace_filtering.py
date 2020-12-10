@@ -154,7 +154,7 @@ def analyse_pcap(NetworkTraffic, file):
                     #     print(layer.name,"/")
 
                 # print(packet_data['relative_timestamp'])
-
+                print(count, ":", packet_data['relative_timestamp'])
                 flow_tuple = (ip_pkt.src, ip_pkt.dst, src_port, dst_port, packet_data["protocol"])
                 # if flow_tuple != ('52.87.241.159', '192.168.1.106', 443, 46330, "TCP"):
                 #     continue

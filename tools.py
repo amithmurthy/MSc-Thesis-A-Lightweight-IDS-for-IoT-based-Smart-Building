@@ -30,7 +30,7 @@ def unpickle_objects(file_path, device_filter):
     import re
     device_objects = []
     count = 0
-    limit =  math.inf #This is for logic testing purposes  math.inf
+    limit = 2 #This is for logic testing purposes  math.inf
     files = []
     for network_trace in database.iterdir():
         count += 1
@@ -84,8 +84,8 @@ def get_malicious_flows(folder_path):
                         proto = "UDP"
                     date = time.strftime('%Y-%m-%d', time.localtime(int(elements[0])/1000))
                     if date in malicious_flows:
-                        malicious_flows[date].append((elements[4], elements[5], elements[7], elements[8], proto))
+                        malicious_flows[date].append((elements[4], elements[5], int(elements[7]), int(elements[8]), proto))
                     else:
                         malicious_flows[date] = []
-                        malicious_flows[date].append((elements[4], elements[5], elements[7], elements[8], proto))
+                        malicious_flows[date].append((elements[4], elements[5], int(elements[7]), int(elements[8]), proto))
     return malicious_flows

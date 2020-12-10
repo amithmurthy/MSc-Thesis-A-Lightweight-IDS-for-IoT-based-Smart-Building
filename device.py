@@ -210,7 +210,7 @@ class DeviceProfile:
         # udp_stats = [avg_udp_input_pkt_size, input_udp_flow_duration, avg_udp_output_pkt_size, output_udp_flow_duration]
 
         # self.plot_pkt_size(tcp_stats, udp_stats)
-        print("Finish compute attributes")
+        # print("Finish compute attributes")
         # self.get_flow_pairs(flows)
         # self.plot_jitter()
 
@@ -396,7 +396,7 @@ class DeviceProfile:
         first_pkt_time = 0
         last_pkt_time = 0
         count = 0
-        print(self.all_flow_tuples)
+        # print(self.all_flow_tuples)
 
         for flow in self.all_flow_tuples:
             count += 1
