@@ -5,6 +5,7 @@ from network import NetworkTrace
 import threading
 from pathlib import Path
 from flow_stats import *
+import os
 """
 This file controls the filtering and analysis process 
 
@@ -24,8 +25,8 @@ infected_devices = ["Belkin wemo motion sensor", "Belkin Wemo switch", "Samsung 
                     "Amazon Echo", "iHome"]
 
 dataset_file_paths = {
-    "tplink-plug": r"D:\iot-data\uk\tplink-plug",
-    'ring-doorbell': r"D:\iot-data\uk\ring-doorbell"
+    "tplink-plug": r"D:\Mon(IoT)r\iot-data\uk\tplink-plug",
+    'ring-doorbell': r"D:\Mon(IoT)r\iot-data\uk\ring-doorbell"
 }
 device_events = {
     "tplink-plug": {
@@ -73,23 +74,31 @@ def analyse_dataset(dataset, save_path,malicious_pkts,benign_pkts):
         processed_files.append(str(file)[-13:-5])
 
 def analyse_device_events(file_path, device):
-    files = Path(file_path)
+    print(file_path)
+    test = Path(file_path) / device
 
+    files = Path(test)
+    # files = path.parent / device
+    print(files)
+    count = 0
     for file in files.iterdir():
+        count +=1
         if file.name in device_events[device]:
-            # print(file.name)
+            print(file.name)
             for pcap in file.iterdir():
                 # print(pcap.name)
                 if pcap.name[0:-5] in device_events[device][file.name]:
-                    print("test")
                     traffic_file = NetworkTrace(pcap)
-                    analyse_pcap(traffic_file, FileIO(pcap))
+                    print(pcap.name)
+                    if count < 2:
+                        analyse_pcap(traffic_file, FileIO(pcap))
                 else:
                     continue
             else:
                 continue
 
 def main():
+    analyse_device_events(r"D:\Mon(IoT)r\iot-data\uk", "tplink-plug")
     # analyse_device_events(dataset_file_paths['tplink-plug'], "tplink-plug")
     # analyse_device_events(dataset_file_paths['ring-doorbell'], "ring-doorbell")
     # parse_dataset()
@@ -116,16 +125,16 @@ def main():
 
     # analyse_dataset(attack_dataset, attack_file_path, malicious_pkts, benign_pkts)
     processed = ["Dropcam", "Amazon Echo", "Netatmo Welcom", "TP-Link Day Night Cloud camera", "Samsung SmartCam"]
-    for device in iot:
-        if device == "iHome":
-            print(device)
-            x, dates = unpickle_objects(dataset1_file_path, device)
-            print(x)
-            make_graphs = model_device_behaviour(x,dates , mal_flows={})
-            if make_graphs:
-                print(make_graphs)
-        else:
-            continue
+    # for device in iot:
+    #     if device == "iHome":
+    #         print(device)
+    #         x, dates = unpickle_objects(dataset1_file_path, device)
+    #         print(x)
+    #         make_graphs = model_device_behaviour(x,dates , mal_flows={})
+    #         if make_graphs:
+    #             print(make_graphs)
+    #     else:
+    #         continue
     malicious_flows = get_malicious_flows(r"C:\Users\amith\Documents\Uni\Masters\Datasets\UNSW\2018\annotations\annotations")
     dates = ["2018-06-01","2018-06-02", "2018-06-03", "2018-06-04","2018-06-06", "2018-06-07","2018-06-08"]
     mal_keys = list(malicious_flows.keys())

@@ -11,7 +11,7 @@ import math
 import shelve
 import klepto as kl
 from network import NetworkTrace
-from datetime import datetime, date
+from datetime import datetime, date, timedelta
 from packet_level_signature import GraphNetwork
 from device import DeviceProfile
 from tools import *
@@ -49,20 +49,21 @@ def analyse_pcap(NetworkTraffic, file):
         count += 1
         if count <= limit:
             ether_pkt = Ether(pkt_data)
-            if 'type' not in ether_pkt.fields:
-                # Logic Link Control (LLC) frames will have 'len' instead of 'type'.
-                # We disregard those
-                continue
             """ MAC Address and IP address extraction and sorting traffic to each device """
             # if device_filter is True:
             #     if ether_pkt.src != device_id and str(ether_pkt.dst) != device_id:
             #         continue
+
             if count == 1:
                 first_pkt_time, relative_ts = get_timestamp(pkt_metadata, count)
                 packet_data['relative_timestamp'] = relative_ts
             else:
                 packet_data['relative_timestamp'] = get_timestamp(pkt_metadata, count, first_pkt_time)
 
+            if 'type' not in ether_pkt.fields:
+                # Logic Link Control (LLC) frames will have 'len' instead of 'type'.
+                # We disregard those
+                continue
             if ARP in ether_pkt:
                 continue
             ipv = None
@@ -237,32 +238,38 @@ def icmp_info(ip_pkt, ipv):
     icmp_data = {'payload_len': len(icmp_pkt.payload) - 8, 'type': icmp_pkt.type}
     return icmp_data
 
-
 def get_timestamp(pkt_metadata,count, *args):
-    pkt_timestamp = (pkt_metadata.tshigh << 32) | pkt_metadata.tslow
-    pkt_timestamp_resolution = pkt_metadata.tsresol
-    return_tuple = False
-    if len(args) != 0:
-        first_pkt_time = args[0]
-    if count == 1:
-        first_pkt_timestamp = pkt_timestamp
-        first_pkt_timestamp_resolution = pkt_timestamp_resolution
-        first_pkt_ts = printable_timestamp(first_pkt_timestamp, first_pkt_timestamp_resolution)
-        first_pkt_dt = datetime.strptime(first_pkt_ts, '%Y-%m-%d %H:%M:%S.%f')
-        first_pkt_time = first_pkt_dt.time()
-        return_tuple = True
-    timestamp = printable_timestamp(pkt_timestamp, pkt_timestamp_resolution)
-    date_time_obj = datetime.strptime(timestamp, '%Y-%m-%d %H:%M:%S.%f')
-    this_pkt_ts = date_time_obj.time()
+    tuple_type = None
     try:
-        this_pkt_relative_timestamp = datetime.combine(date.today(), this_pkt_ts) - datetime.combine(date.today(),
-                                                                                                     first_pkt_time)
-    except UnboundLocalError as e:
-        print(e)
+        #test the packet metadata tuple to figure out which tuple type is in the pcap
+        pkt_metadata.tshigh
+        tuple_type = "tshigh"
+    except AttributeError:
+        tuple_type = "seconds"
+
+    if len(args) != 0:
+        first_pkt_timestamp = args[0]
+    return_tuple = False
+    if tuple_type == "tshigh":
+        pkt_timestamp = (pkt_metadata.tshigh << 32) | pkt_metadata.tslow
+        if count == 1:
+            first_pkt_timestamp = pkt_timestamp
+            # print(first_pkt_timestamp)
+            first_pkt_timestamp_resolution = pkt_metadata.tsresol
+            return_tuple = True
+        this_pkt_ts = pkt_timestamp - first_pkt_timestamp
+        this_pkt_relative_timestamp = this_pkt_ts / pkt_metadata.tsresol
+    elif tuple_type == "seconds":
+        pkt_epoch_timestamp = (pkt_metadata.sec) + (pkt_metadata.usec / 1000000)
+        date_timestamp = datetime.fromtimestamp(pkt_epoch_timestamp)
+        if count == 1:
+            first_pkt_timestamp = date_timestamp
+            return_tuple = True
+        this_pkt_relative_timestamp = (date_timestamp - first_pkt_timestamp).total_seconds()
     if return_tuple is False:
         return this_pkt_relative_timestamp
     else:
-        return first_pkt_time, this_pkt_relative_timestamp
+        return first_pkt_timestamp, this_pkt_relative_timestamp
 
 def printable_timestamp(ts, resol):
     ts_sec = ts // resol
