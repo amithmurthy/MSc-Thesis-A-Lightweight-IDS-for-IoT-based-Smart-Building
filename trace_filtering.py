@@ -120,6 +120,11 @@ def analyse_pcap(NetworkTraffic, file):
                 if TCP in ip_pkt:
                     packet_data["protocol"] = "TCP"
                     packet_data['tcp_data'] = tcp_info(ip_pkt, ipv)
+                    try:
+                        assert packet_data['tcp_data']['payload_len'] <= 1500
+                    except AssertionError:
+                        print("count", count)
+                        print(file)
                     src_port = packet_data['tcp_data']['src_port']
                     dst_port = packet_data['tcp_data']['dst_port']
                     protocol = "tcp_data"
@@ -154,8 +159,9 @@ def analyse_pcap(NetworkTraffic, file):
                     # for layer in get_packet_layers(ether_pkt):
                     #     print(layer.name,"/")
 
-                # print(packet_data['relative_timestamp'])
-                print(count, ":", packet_data['relative_timestamp'])
+                # print(type(packet_data['relative_timestamp']) is float)
+                # print(count, ":", packet_data['relative_timestamp'])
+
                 flow_tuple = (ip_pkt.src, ip_pkt.dst, src_port, dst_port, packet_data["protocol"])
                 # if flow_tuple != ('52.87.241.159', '192.168.1.106', 443, 46330, "TCP"):
                 #     continue
@@ -203,7 +209,6 @@ def analyse_pcap(NetworkTraffic, file):
             break
     print("Finished", NetworkTraffic.file_name)
 
-
 def tcp_info(ip_pkt, ipv):
     tcp_data = {}
     tcp_pkt = ip_pkt[TCP]
@@ -231,6 +236,7 @@ def udp_info(ip_pkt, ipv):
     udp_pkt = ip_pkt[UDP]
     udp_data = {'src_port': udp_pkt.sport, 'dst_port': udp_pkt.dport, 'payload_len': udp_pkt.len - 8}
     # UDP header is fixed at 8 bytes. Length field specifies length of header + data => len - 8 = payload
+    assert udp_pkt.len - 8 <= 1500
     return udp_data
 
 def icmp_info(ip_pkt, ipv):
@@ -365,15 +371,15 @@ def check_flows(NetworkTraffic):
         if value in NetworkTraffic.flow_table.keys():
             print("Device", value, "has", len(NetworkTraffic.flow_table[value]), " flows")
 
-def get_device_objects(NetworkTraffic, malicious_pkts, benign_pkts):
+def get_device_objects(NetworkTraffic,malicious_pkts, benign_pkts):
     device_object_list = []
     for key in NetworkTraffic.iot_devices:
         addr = NetworkTraffic.iot_devices[key]
         if addr not in NetworkTraffic.mac_to_ip:
-            print("key not in dict")
+            # print(key, "not in mac_to_ip")
             continue
         iot_device = DeviceProfile(key, addr, NetworkTraffic.mac_to_ip[addr], NetworkTraffic.device_flows[addr])
-        # iot_device.update_profile(NetworkTraffic.device_flows[addr],malicious_pkts, benign_pkts)
+        # iot_device.update_profile(malicious_pkts, benign_pkts)
         device_object_list.append(iot_device)
     return device_object_list
 
@@ -385,8 +391,6 @@ def get_packet_layers(pkt):
             break
         yield layer
         counter += 1
-
-
 
 # if __name__ == "__main__":
     # NetworkTraffic = NetworkTrace("16-09-23.pcap")

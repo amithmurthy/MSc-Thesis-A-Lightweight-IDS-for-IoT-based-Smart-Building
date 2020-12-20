@@ -6,15 +6,18 @@ import logging
 
 
 class NetworkTrace:
-    def __init__(self, trace_file):
+    def __init__(self, trace_file, devices = None):
         if len(str(trace_file)) > 20:
             self.file_name = str(trace_file)[-13:-5]
         else:
             self.file_name = trace_file
         self.mac_to_ip = {}  #Aim is to map device to its IP addresses. A device may have multiple IPs but only one MAC
 
-        ## Reference: UNSW IoT traffic profile dataset, the information for mac address found at: https://iotanalytics.unsw.edu.au/resources/List_Of_Devices.txt
-        self.iot_devices = {"Smart Things": "d0:52:a8:00:67:5e",
+        if devices is not None:
+            self.iot_devices = devices
+        else:
+            ## Reference: UNSW IoT traffic profile dataset, the information for mac address found at: https://iotanalytics.unsw.edu.au/resources/List_Of_Devices.txt
+            self.iot_devices = {"Smart Things": "d0:52:a8:00:67:5e",
                        "Amazon Echo": "44:65:0d:56:cc:d3",
                        "Netatmo Welcom": "70:ee:50:18:34:43",
                        "TP-Link Day Night Cloud camera": "f4:f2:6d:93:51:f1",
@@ -38,6 +41,7 @@ class NetworkTrace:
                        "Samsung Galaxy Tab":"08:21:ef:3b:fc:e3",
                        "Nest Dropcam":"30:8c:fb:b6:ea:45",
                        "TPLink Router Bridge LAN (Gateway)":"14:cc:20:51:33:ea"}
+
         #"tplink-plug": "50:c7:bf:b1:d2:78"
         self.iot_mac_addr = self.iot_devices.values()
         self.non_iot = {

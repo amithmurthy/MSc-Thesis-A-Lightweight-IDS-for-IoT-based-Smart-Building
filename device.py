@@ -87,30 +87,54 @@ class DeviceProfile:
         output_udp_flow_duration = []
         for flow_direction in self.flows:
             flow_keys = list(self.flows[flow_direction].keys())
-            first_flow = flow_keys[0]
-            last_flow = flow_keys[-1]
-            first_pkt_time = self.flows[flow_direction][first_flow][0]['relative_timestamp'].total_seconds()
+            if len(flow_keys) == 0:
+                continue
+            try:
+                first_flow = flow_keys[0]
+                last_flow = flow_keys[-1]
+            except IndexError:
+                continue
+            timestamp_type = None
+            if type(self.flows[flow_direction][first_flow][0]['relative_timestamp']) is float:
+                first_pkt_time = self.flows[flow_direction][first_flow][0]['relative_timestamp']
+                timestamp_type = "float"
+            else:
+                first_pkt_time = self.flows[flow_direction][first_flow][0]['relative_timestamp'].total_seconds()
+
             if len(flow_keys) > 1:
                 last_pkt_time = 0
                 for flow_tuple in range(0, len(flow_keys), 1):
                     """Iterates through the last packet of each flow and finds the one with the latest timestamp"""
-                    if last_pkt_time < self.flows[flow_direction][flow_keys[flow_tuple]][-1]['relative_timestamp'].total_seconds():
-                        last_pkt_time = self.flows[flow_direction][flow_keys[flow_tuple]][-1]['relative_timestamp'].total_seconds()
+                    if timestamp_type:
+                        if last_pkt_time < self.flows[flow_direction][flow_keys[flow_tuple]][-1]['relative_timestamp']:
+                            last_pkt_time = self.flows[flow_direction][flow_keys[flow_tuple]][-1]['relative_timestamp']
+                    else:
+                        if last_pkt_time < self.flows[flow_direction][flow_keys[flow_tuple]][-1]['relative_timestamp'].total_seconds():
+                            last_pkt_time = self.flows[flow_direction][flow_keys[flow_tuple]][-1]['relative_timestamp'].total_seconds()
                 flow_direction_duration = last_pkt_time - first_pkt_time
             else:
-                last_pkt = self.flows[flow_direction][first_flow][-1]['relative_timestamp'].total_seconds()
+                if timestamp_type:
+                    last_pkt = self.flows[flow_direction][first_flow][-1]['relative_timestamp']
+                else:
+                    last_pkt = self.flows[flow_direction][first_flow][-1]['relative_timestamp'].total_seconds()
                 flow_direction_duration = last_pkt - first_pkt_time
-            self.flow_direction_rate[flow_direction] = {key: [0, 0] for key in
-                                                        range(0, int(flow_direction_duration) + 1, tick)}
+            self.flow_direction_rate[flow_direction] = {key: [0, 0] for key in range(0, int(flow_direction_duration) + 1, tick)}
             self.flow_rate = {flow: None for flow in self.flows[flow_direction]}
             # print(self.flow_rate)
             for flow in self.flows[flow_direction]:
                 if len(self.flows[flow_direction][flow]) > 1:
-                    start = self.flows[flow_direction][flow][0]['relative_timestamp'].total_seconds()
-                    end = self.flows[flow_direction][flow][-1]['relative_timestamp'].total_seconds()
+                    if timestamp_type:
+                        start = self.flows[flow_direction][flow][0]['relative_timestamp']
+                        end = self.flows[flow_direction][flow][-1]['relative_timestamp']
+                    else:
+                        start = self.flows[flow_direction][flow][0]['relative_timestamp'].total_seconds()
+                        end = self.flows[flow_direction][flow][-1]['relative_timestamp'].total_seconds()
                     duration = abs(end - start)
                 else:
-                    duration = abs(self.flows[flow_direction][flow][0]['relative_timestamp'].total_seconds())
+                    if timestamp_type:
+                        duration = self.flows[flow_direction][flow][0]['relative_timestamp']
+                    else:
+                        duration = abs(self.flows[flow_direction][flow][0]['relative_timestamp'].total_seconds())
                 # self.flow_rate[flow] = {key: 0 for key in range(0, int(duration)+1, 10)}
                 pkt_count = 0
                 flow_size = 0
@@ -123,7 +147,10 @@ class DeviceProfile:
                             flow_type = "malicious"
                         else:
                             flow_type = "benign"
-                    pkt_ts = pkt['relative_timestamp'].total_seconds()
+                    if timestamp_type:
+                        pkt_ts = pkt['relative_timestamp']
+                    else:
+                        pkt_ts = pkt['relative_timestamp'].total_seconds()
                     pkt_times.append(pkt_ts)
                     if pkt['protocol'] == "TCP":
                         payload = pkt["tcp_data"]["payload_len"]
@@ -174,31 +201,36 @@ class DeviceProfile:
                 #     avg_pkt_size = 0
 
                 """"Lists for graphs"""
-                if flow_direction == "incoming":
-                    self.input_flow_stats[flow]["size"] = flow_size
-                    self.input_flow_stats[flow]["duration"] = duration
-                    self.input_flow_stats[flow]["byte rate"] = flow_size / duration
-                    self.input_flow_stats[flow]["pkt rate"] = pkt_count / duration
-                    self.input_flow_stats[flow]["avg packet size"] = avg_pkt_size
-                    self.input_flow_stats[flow]["jitter"] = inter_pkt_arrival
-                    self.input_flow_stats[flow]["pkt count"] = pkt_count
-                    self.input_flow_stats[flow]["flow type"] = flow_type
-                    # if flow[-1] == "TCP":
-                    #     avg_tcp_input_pkt_size.append(avg_pkt_size)
-                    #     input_tcp_flow_duration.append(duration)
-                    # elif flow[-1] == "UDP":
-                    #     avg_udp_input_pkt_size.append(avg_pkt_size)
-                    #     input_udp_flow_duration.append(duration)
-                elif flow_direction == "outgoing":
-                    self.output_flow_stats[flow]["size"] = flow_size
-                    self.output_flow_stats[flow]["duration"] = duration
-                    self.output_flow_stats[flow]["byte rate"] = flow_size / duration
-                    self.output_flow_stats[flow]["pkt rate"] = pkt_count / duration
-                    self.output_flow_stats[flow]["avg packet size"] = avg_pkt_size
-                    self.output_flow_stats[flow]["jitter"] = inter_pkt_arrival
-                    self.output_flow_stats[flow]['pkt count'] = pkt_count
-                    self.output_flow_stats[flow]['flow type'] = flow_type
-
+                try:
+                    if flow_direction == "incoming":
+                        self.input_flow_stats[flow]["size"] = flow_size
+                        self.input_flow_stats[flow]["duration"] = duration
+                        self.input_flow_stats[flow]["avg packet size"] = avg_pkt_size
+                        self.input_flow_stats[flow]["jitter"] = inter_pkt_arrival
+                        self.input_flow_stats[flow]["pkt count"] = pkt_count
+                        self.input_flow_stats[flow]["flow type"] = flow_type
+                        self.input_flow_stats[flow]["byte rate"] = flow_size / duration
+                        self.input_flow_stats[flow]["pkt rate"] = pkt_count / duration
+                        # if flow[-1] == "TCP":
+                        #     avg_tcp_input_pkt_size.append(avg_pkt_size)
+                        #     input_tcp_flow_duration.append(duration)
+                        # elif flow[-1] == "UDP":
+                        #     avg_udp_input_pkt_size.append(avg_pkt_size)
+                        #     input_udp_flow_duration.append(duration)
+                    elif flow_direction == "outgoing":
+                        self.output_flow_stats[flow]["size"] = flow_size
+                        self.output_flow_stats[flow]["duration"] = duration
+                        self.output_flow_stats[flow]["avg packet size"] = avg_pkt_size
+                        self.output_flow_stats[flow]["jitter"] = inter_pkt_arrival
+                        self.output_flow_stats[flow]['pkt count'] = pkt_count
+                        self.output_flow_stats[flow]['flow type'] = flow_type
+                        self.output_flow_stats[flow]["byte rate"] = flow_size / duration
+                        self.output_flow_stats[flow]["pkt rate"] = pkt_count / duration
+                except ZeroDivisionError:
+                    print("duration", duration)
+                    print("flow size:",flow_size)
+                    print("pkt count", pkt_count)
+                    pass
                     # if flow[-1] == "TCP":
                     #     avg_tcp_output_pkt_size.append(avg_pkt_size)
                     #     output_tcp_flow_duration.append(duration)
@@ -354,6 +386,7 @@ class DeviceProfile:
         fig2.legend('best')
         plt.savefig(self.device_name+"jitter_of_flow_direction.png")
 
+
     def plot_flow_pair_byte_rate(self):
         fig = plt.figure()
         ax = fig.add_subplot(1, 1, 1)
@@ -396,8 +429,6 @@ class DeviceProfile:
         first_pkt_time = 0
         last_pkt_time = 0
         count = 0
-        # print(self.all_flow_tuples)
-
         for flow in self.all_flow_tuples:
             count += 1
             direction = None
@@ -406,12 +437,21 @@ class DeviceProfile:
             else:
                 direction = "outgoing"
             if count == 0:
-                first_pkt_time = self.flows[direction][flow][0]['relative_timestamp'].total_seconds()
-                last_pkt_time = self.flows[direction][flow][-1]['relative_timestamp'].total_seconds()
-            if self.flows[direction][flow][0]['relative_timestamp'].total_seconds() < first_pkt_time:
-                first_pkt_time = self.flows[direction][flow][0]['relative_timestamp'].total_seconds()
-            if self.flows[direction][flow][-1]['relative_timestamp'].total_seconds() > last_pkt_time:
-                last_pkt_time = self.flows[direction][flow][-1]['relative_timestamp'].total_seconds()
+                """Relative timestamp had a bug so first check is for fixed version"""
+                if type(self.flows[direction][flow][0]['relative_timestamp']) is float:
+                     first_pkt_time = self.flows[direction][flow][0]['relative_timestamp']
+                     last_pkt_time = self.flows[direction][flow][-1]['relative_timestamp']
+                     if self.flows[direction][flow][0]['relative_timestamp'] < first_pkt_time:
+                         first_pkt_time = self.flows[direction][flow][0]['relative_timestamp']
+                     if self.flows[direction][flow][-1]['relative_timestamp'] > last_pkt_time:
+                         last_pkt_time = self.flows[direction][flow][-1]['relative_timestamp']
+                else:
+                    first_pkt_time = self.flows[direction][flow][0]['relative_timestamp'].total_seconds()
+                    last_pkt_time = self.flows[direction][flow][-1]['relative_timestamp'].total_seconds()
+                    if self.flows[direction][flow][0]['relative_timestamp'].total_seconds() < first_pkt_time:
+                        first_pkt_time = self.flows[direction][flow][0]['relative_timestamp'].total_seconds()
+                    if self.flows[direction][flow][-1]['relative_timestamp'].total_seconds() > last_pkt_time:
+                        last_pkt_time = self.flows[direction][flow][-1]['relative_timestamp'].total_seconds()
 
         duration = last_pkt_time - first_pkt_time
         self.device_activity = {key: 0 for key in range(0, int(duration) +1, tick)}

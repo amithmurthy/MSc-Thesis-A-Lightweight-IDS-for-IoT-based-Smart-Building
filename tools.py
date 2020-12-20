@@ -4,6 +4,8 @@ import klepto as kl
 from device import DeviceProfile
 import math
 import time
+import matplotlib.pyplot as plt
+
 
 def halve_dict(large_dict):
     large_dict = large_dict
@@ -67,8 +69,6 @@ def get_malicious_flows(folder_path):
     folder = Path(folder_path)
 
     malicious_flows = {}
-
-
     for file in folder.iterdir():
         if "packet" in file.name:
             with open(file, 'r') as txtfile:
@@ -89,3 +89,39 @@ def get_malicious_flows(folder_path):
                         malicious_flows[date] = []
                         malicious_flows[date].append((elements[4], elements[5], int(elements[7]), int(elements[8]), proto))
     return malicious_flows
+
+def get_ax():
+    fig = plt.figure()
+    ax = fig.add_subplot(1, 1, 1)
+    return ax
+
+def get_iot_devices(country):
+    """Returns a dictionary of IoT devices and their MAC address accroding to the folder in the Northeastern IMC 2019 Dataset.
+    The addresses were obtained from manual wireshark inspection """
+    uk_wired = ["bosiwo-camera-wired", "wansview-cam-wired"]
+    uk_iot_devices = {
+        "tplink-plug": "50:c7:bf:b1:d2:78",
+        "bosiwo-camera-wired":"ae:ca:06:0e:ec:89",
+        "blink-camera":"f4:b8:5e:68:8f:35",
+        "charger-camera":"fc:ee:e6:2e:23:a3",
+        "honeywell-thermostat": "b8:2c:a0:28:3e:6b",
+        "magichome-strip": "dc:4f:22:89:fc:e7",
+        "nest-tstat": "64:16:66:2a:98:62",
+        "ring-doorbell": "f0:45:da:36:e6:23",
+        "sengled-hub": "b0:ce:18:20:43:bf",
+        "tplink-bulb":"50:c7:bf:ca:3f:9d",
+        "t-wemo-plug":"58:ef:68:99:7d:ed",
+        "wansview-cam-wired":"78:a5:dd:28:a1:b7",
+        "yi-camera": "0c:8c:24:0b:be:fb"
+    }
+    us_iot_devices = {
+        "phillips-bulb": "34:ce:00:99:9b:83",
+        "tplink-plug":"50:c7:bf:5a:2e:a0",
+        "tplink-bulb": "50:c7:bf:a0:f3:76",
+        "t-phillips-hub": "00:17:88:68:5f:61",
+        "zmodo-doorbell":"7c:c7:09:56:6e:48",
+    }
+    if country == "uk":
+        return uk_iot_devices
+    elif country == "us":
+        return us_iot_devices

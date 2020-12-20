@@ -24,10 +24,6 @@ iot = ["Smart Things", "Amazon Echo", "Netatmo Welcom", "TP-Link Day Night Cloud
 infected_devices = ["Belkin wemo motion sensor", "Belkin Wemo switch", "Samsung SmartCam", "Light Bulbs LiFX Smart Bulb","TP-Link Smart plug", "Netatmo Welcom",
                     "Amazon Echo", "iHome"]
 
-dataset_file_paths = {
-    "tplink-plug": r"D:\Mon(IoT)r\iot-data\uk\tplink-plug",
-    'ring-doorbell': r"D:\Mon(IoT)r\iot-data\uk\ring-doorbell"
-}
 device_events = {
     "tplink-plug": {
         'alexa_off': "2019-05-04_15_27_41.24s",
@@ -74,31 +70,65 @@ def analyse_dataset(dataset, save_path,malicious_pkts,benign_pkts):
         processed_files.append(str(file)[-13:-5])
 
 def analyse_device_events(file_path, device):
-    print(file_path)
-    test = Path(file_path) / device
-
-    files = Path(test)
-    # files = path.parent / device
-    print(files)
-    count = 0
-    for file in files.iterdir():
-        count +=1
-        if file.name in device_events[device]:
-            print(file.name)
-            for pcap in file.iterdir():
-                # print(pcap.name)
-                if pcap.name[0:-5] in device_events[device][file.name]:
-                    traffic_file = NetworkTrace(pcap)
-                    print(pcap.name)
-                    if count < 2:
-                        analyse_pcap(traffic_file, FileIO(pcap))
+    # this is where the pcaps are stored
+    dir_path = Path(file_path) / device
+    command_folders = Path(dir_path)
+    country = str(file_path)[-2:] # either the us or uk depends on the file path
+    iot_devices = get_iot_devices(country)
+    # for obj in iot_devices:
+    #     path = r"C:\Users\amith\Documents\Uni\Masters\Implementation\commands"
+    #     path = Path(path) / country / obj
+    #     folder = Path(path)
+    #     if folder.is_dir():
+    #         pass
+    #     else:
+    #         folder.mkdir()
+    iot_objects = {}
+    non_iot_objects = {}
+    for command in command_folders.iterdir():
+        # if file.name in device_events[device]:
+            # print(file.name)
+        iot_objects[command.name] = []
+        non_iot_objects[command.name] = []
+        for pcap in command.iterdir():
+            # print(pcap.name)
+            # if pcap.name[0:-5] in device_events[device][file.name]:
+            print("analysing pcap", pcap.name)
+            print
+            traffic_file = NetworkTrace(pcap, devices=iot_devices)
+            analyse_pcap(traffic_file, FileIO(pcap))
+            print("creating device objs from pcap")
+            device_list = get_device_objects(traffic_file, [], [])
+            for device_obj in device_list:
+                if device_obj.mac_address == iot_devices[device]:
+                    iot_objects[command.name].append(device_obj)
                 else:
-                    continue
-            else:
-                continue
+                    non_iot_objects[command.name].append(device_obj)
+    print("iot_objects:",iot_objects)
+    model_command_traffic(iot_objects, country, device)
+    # for command_name in iot_objects:
+    #     # Saving graphs in appropriate folders i.e. accroding to the command
+    #     save_graph_path = Path(plots_folder) / country / device / command_name
+    #     save_folder = Path(save_graph_path)
+    #     if save_folder.is_dir():
+    #         pass
+    #     else:
+    #         save_folder.mkdir()
+    #     plot_command_traffic = model_device_behaviour(device_trafic_objects=iot_objects[command_name], dates=None, mal_flows={}, save_folder=save_folder, behaviour_type="benign")
+    #     if plot_command_traffic:
+    #         print(plot_command_traffic)
+    #         continue
+
 
 def main():
-    analyse_device_events(r"D:\Mon(IoT)r\iot-data\uk", "tplink-plug")
+    process_moniotr_file_path = r"C:\Users\amith\Documents\Uni\Masters\processed-traffic\moniotr"
+    northeastern_dataset_uk = r"D:\Mon(IoT)r\iot-data\uk"
+    analyse_device_events(northeastern_dataset_uk, "tplink-plug")
+    # devices = get_iot_devices("uk")
+    # for device in devices:
+    #     if device != "yi-camera" or device != "tplink-plug":
+    #         analyse_device_events(northeastern_dataset_uk, device)
+
     # analyse_device_events(dataset_file_paths['tplink-plug'], "tplink-plug")
     # analyse_device_events(dataset_file_paths['ring-doorbell'], "ring-doorbell")
     # parse_dataset()
@@ -119,23 +149,17 @@ def main():
     #     benign_pkts = pickle.load(pickle_fd)
     #     pkt_rmse = pickle.load(pickle_fd)
 
-    attack_file_path = r"C:\Users\amith\Documents\Uni\Masters\processed-traffic\Attack"
-    benign_file_path = r"C:\Users\amith\Documents\Uni\Masters\processed-traffic\Benign"
-    dataset1_file_path = r"C:\Users\amith\Documents\Uni\Masters\processed-traffic\2016"
+    save_attack_file_path = r"C:\Users\amith\Documents\Uni\Masters\processed-traffic\Attack"
+    save_benign_file_path = r"C:\Users\amith\Documents\Uni\Masters\processed-traffic\Benign"
+    save_dataset1_file_path = r"C:\Users\amith\Documents\Uni\Masters\processed-traffic\2016"
 
     # analyse_dataset(attack_dataset, attack_file_path, malicious_pkts, benign_pkts)
     processed = ["Dropcam", "Amazon Echo", "Netatmo Welcom", "TP-Link Day Night Cloud camera", "Samsung SmartCam"]
-    # for device in iot:
-    #     if device == "iHome":
-    #         print(device)
-    #         x, dates = unpickle_objects(dataset1_file_path, device)
-    #         print(x)
-    #         make_graphs = model_device_behaviour(x,dates , mal_flows={})
-    #         if make_graphs:
-    #             print(make_graphs)
-    #     else:
-    #         continue
+
+
     malicious_flows = get_malicious_flows(r"C:\Users\amith\Documents\Uni\Masters\Datasets\UNSW\2018\annotations\annotations")
+
+
     dates = ["2018-06-01","2018-06-02", "2018-06-03", "2018-06-04","2018-06-06", "2018-06-07","2018-06-08"]
     mal_keys = list(malicious_flows.keys())
     # for device in infected_devices:
@@ -157,20 +181,28 @@ def main():
         # print(len(traffic_objects))
         # print(len(dates))
 
-
     # thread = threading.Thread(target=analyse_pcap(pcap_file, test_file))
     # thread.start()
     # thread.join()
-
+    # for device in iot:
+    #     if device == "iHome":
+    #         print(device)
+    #         x, dates = unpickle_objects(dataset1_file_path, device)
+    #         print(x)
+    #         make_graphs = model_device_behaviour(x,dates , mal_flows={})
+    #         if make_graphs:
+    #             print(make_graphs)
+    #     else:
+    #         continue
 
 if __name__ == "__main__":
-
+    main()
     # for device in infected_devices:
     #     path = r"C:\Users\amith\Documents\Uni\Masters\Implementation\attack"
     #     path = path +"\_" + device
     #     folder = Path(path)
     #     folder.mkdir()
-    main()
+
 
     # thread1 = threading.Thread(target= save_traffic(pcap_file, file_path, devices))
     # thread2 = threading.Thread(target=create_device_plots(devices,malicious_pkts, benign_pkts))
@@ -182,4 +214,3 @@ if __name__ == "__main__":
 
     # devices_objs = unpickle_objects(file_path, "16-09-23")
     # print(devices_objs)
-

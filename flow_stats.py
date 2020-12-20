@@ -2,14 +2,13 @@
 import matplotlib.pyplot as plt
 import numpy as np
 from pylab import *
+from pathlib import Path
 import scipy.stats
+from tools import get_ax
 """"
-This module is for calculating stats on Device objects
+This module is for calculating stats and pon Device objects
 """
-
-
-
-def model_device_behaviour(device_trafic_objects, dates,mal_flows):
+def model_device_behaviour(device_trafic_objects, dates,mal_flows, save_folder, behaviour_type):
     """
     :param device_trafic_objects: list of DeviceProfile objects which contain the traffic of the day
     :param date: date of the malicious flows
@@ -28,12 +27,13 @@ def model_device_behaviour(device_trafic_objects, dates,mal_flows):
     out_flows = []
     days = 0
     keys = list(mal_flows.keys())
-    for date in dates:
-        print(date)
-        if date in keys:
-            malicious_flows = mal_flows[date]
-        else:
-            malicious_flows = []
+    if dates is not None:
+        for date in dates:
+            print(date)
+            if date in keys:
+                malicious_flows = mal_flows[date]
+            else:
+                malicious_flows = []
     in_benign_flow_sizes = []
     in_benign_flow_duration = []
     out_benign_flow_duration = []
@@ -50,38 +50,43 @@ def model_device_behaviour(device_trafic_objects, dates,mal_flows):
         device_obj.update_profile([], [])
         # analyse_pkt_order(device_obj, "incoming")
         # get_input_jitter(device_obj)
-        # input_stats = get_avg_input_stats(device_obj, malicious_flows)
-        # output_stats = get_avg_output_stats(device_obj, malicious_flows)
+        if behaviour_type == "benign":
+            input_stats = get_avg_input_stats(device_obj, mal_flows=[])
+            output_stats = get_avg_output_stats(device_obj, mal_flows=[])
+        else:
+            input_stats = get_avg_input_stats(device_obj, malicious_flows)
+            output_stats = get_avg_output_stats(device_obj, malicious_flows)
         # in_mal_flow_sizes.append(input_stats['mal_flow_sizes'])
         # in_mal_flow_duration.append(input_stats['mal_flow_duration'])
-        # in_benign_flow_sizes.append(input_stats['benign_flow_sizes'])
-        # in_benign_flow_duration.append(input_stats['benign_flow_duration'])
+        in_benign_flow_sizes.append(input_stats['benign_flow_sizes'])
+        in_benign_flow_duration.append(input_stats['benign_flow_duration'])
         # out_mal_flow_sizes.append(output_stats['mal_flow_sizes'])
         # out_mal_flow_duration.append(output_stats['mal_flow_duration'])
-        # out_benign_flow_sizes.append(output_stats['benign_flow_sizes'])
-        # out_benign_flow_duration.append(output_stats['benign_flow_duration'])
-        # avg_input_rate.append(input_stats['avg_rate'])
-        # avg_input_pkt_rate.append(input_stats['pkt_rate'])
-        # avg_output_rate.append(output_stats['avg_rate'])
-        # avg_output_pkt_rate.append(output_stats['pkt_rate'])
-        # input_traffic_size.append(input_stats['size'] / 1000000)
-        # output_traffic_size.append(output_stats['size'] / 1000000)
-        # total_traffic += (input_stats['size'] / 1000000) + (output_stats['size'] / 1000000)
-        # total_traffic_size.append(total_traffic)
-        # in_flows.append(input_stats['flows'])
-        # out_flows.append(output_stats['flows'])
+        out_benign_flow_sizes.append(output_stats['benign_flow_sizes'])
+        out_benign_flow_duration.append(output_stats['benign_flow_duration'])
+        avg_input_rate.append(input_stats['avg_rate'])
+        avg_input_pkt_rate.append(input_stats['pkt_rate'])
+        avg_output_rate.append(output_stats['avg_rate'])
+        avg_output_pkt_rate.append(output_stats['pkt_rate'])
+        input_traffic_size.append(input_stats['size'] / 1000000)
+        output_traffic_size.append(output_stats['size'] / 1000000)
+        total_traffic += (input_stats['size'] / 1000000) + (output_stats['size'] / 1000000)
+        total_traffic_size.append(total_traffic)
+        in_flows.append(input_stats['flows'])
+        out_flows.append(output_stats['flows'])
         input_pkt_sizes.extend(get_input_pkt_sizes(device_obj))
         output_pkt_sizes.extend(get_output_pkt_sizes(device_obj))
         time.append(days)
 
     # if len(device_trafic_objects) > 0:
     device_name = device_trafic_objects[0].device_name
-    file_name = "plots/_" + device_name
+    file_name = Path(save_folder)
+    file_name = str(file_name)
     # file_name = "attack/_" + device_name
     pkt_size_cdf(input_pkt_sizes, output_pkt_sizes, file_name)
-    # plot_flow_direction(time, avg_input_rate, avg_output_rate, "byte_rate", file_name)
-    # plot_flow_direction(time, avg_input_pkt_rate, avg_output_pkt_rate, "pkt_rate", file_name)
-    # plot_flow_direction(time, input_traffic_size, output_traffic_size, "size", file_name)
+    plot_flow_direction(time, avg_input_rate, avg_output_rate, "byte_rate", file_name)
+    plot_flow_direction(time, avg_input_pkt_rate, avg_output_pkt_rate, "pkt_rate", file_name)
+    plot_flow_direction(time, input_traffic_size, output_traffic_size, "size", file_name)
     # plot_flow_direction(time, in_flows, out_flows, "flows", file_name)
     # plot_input_flow_graph(time, input_traffic_size, file_name)
     return device_name + "done"
@@ -104,6 +109,161 @@ def model_device_behaviour(device_trafic_objects, dates,mal_flows):
         #     for i in range(0, len(out_mal_flow_sizes), 1):
         #         plot_flow_size(out_benign_flow_sizes[i], out_benign_flow_duration[i], out_mal_flow_sizes[i], out_mal_flow_duration[i], "output", file_name, i)
 
+def model_command_traffic(iot_objects, country, device):
+    on = []
+    off = []
+    move =[]
+    brightness = []
+    power = []
+    command_traffic = {}
+    color = []
+    watch = []
+
+    for command_name in iot_objects:
+        if "on" in command_name:
+            on.append(command_name)
+        elif "off" in command_name:
+            off.append(command_name)
+        elif "color" in command_name:
+            color.append(command_name)
+        elif "power" in command_name:
+            power.append(command_name)
+
+    command_stats = {command: {"input_size":[], "input_duration":[], "output_pkt_sizes":[], "output_duration":[], "input_jitter":[], "output_jitter":[]} for command in iot_objects}
+    for command in iot_objects:
+        for device_obj in iot_objects[command]:
+            """A device_obj is the devices traffic from a command tracefile """
+            device_obj.update_profile([],[]) # Calculates the flow stats
+            input_stats = get_avg_input_stats(device_obj, mal_flows=[])
+            output_stats = get_avg_output_stats(device_obj, mal_flows=[])
+            command_stats[command]['input_jitter'].extend(get_jitter(device_obj, "incoming"))
+            command_stats[command]['output_jitter'].extend(get_jitter(device_obj, "outgoing"))
+            # if input_stats['size'] > 0:
+            command_stats[command]['input_size'].extend(input_stats['benign_flow_sizes'])
+            # if output_stats['size'] > 0:
+            command_stats[command]['output_size'].extend(output_stats['benign_flow_sizes'])
+            command_stats[command]['input_duration'].extend(input_stats['benign_flow_duration'])
+            command_stats[command]['output_duration'].extend(output_stats['benign_flow_duration'])
+
+    plots_folder = r"C:\Users\amith\Documents\Uni\Masters\Implementation\commands"
+    folder = Path(plots_folder) / country / device
+    save_folder = Path(folder)
+    save_folder = str(save_folder)
+    # plot_command_flows(command_stats, commands=[], name="on", file=save_folder)
+    # plot_command_flows(command_stats, commands=off, name="off", file=save_folder)
+    # plot_command_flows(command_stats, commands=power, name="power", file=save_folder)
+    # plot_command_jitter_cdf(command_stats, save_folder)
+    plot_command_pkt_size_cdf(command_stats, save_folder)
+    # pkt_size_cdf(command_stats["alexa_on"]['input_jitter'], command_stats['alexa_on']['output_jitter'], save_folder)
+    if len(color) > 0:
+        plot_command_flows(command_stats, commands=color, name="color", file=save_folder)
+
+
+def plot_command_jitter_cdf(command_stats, save_folder):
+    """Compares the jitter of remote and local commands"""
+    ax = get_ax()
+    for command in command_stats:
+        if "on" in command and "alexa" not in command and "google" not in command:
+            command_jitter_values = sorted(command_stats[command]['input_jitter'])
+            command_jitter_cdf = np.arange(1, len(command_jitter_values) + 1) / len(command_jitter_values)
+            label = None
+            if "local" in command:
+                label = "local"
+            elif "lan" in command:
+                label = "lan"
+            elif "wan" in command:
+                label = "wan"
+            ax.plot(command_jitter_values, command_jitter_cdf, label=label)
+        # command_response_jitter = sorted(command_stats[command]['output_jitter'])
+
+        # command_response_cdf = np.arange(1, len(command_response_jitter) + 1) / len(command_response_jitter)
+
+    ax.set_xlabel("jitter (ms)")
+    ax.set_ylabel("CDF")
+    # ax.plot(command_jitter_values, command_jitter_cdf, label='command jitter')
+    # ax.plot(command_response_jitter, command_response_cdf, label='response jitter')
+    plt.legend(loc='best')
+    plt.savefig(save_folder+"/on/jittercdf.png")
+    plt.show()
+
+
+def get_jitter(device_obj, direction):
+    jitter = []
+    # flow_jitter = {flow: [] for flow in device_obj.flows[direction]}
+    flow_jitter = {}
+    for flow in device_obj.flows[direction]:
+        flow_jitter[flow] = []
+        pkt_no = []
+        flow_traffic = device_obj.flows[direction][flow]
+        if len(flow_traffic) > 1:
+            for i in range(0, len(flow_traffic)-1, 1):
+                try:
+                    assert flow_traffic[i+1]['relative_timestamp'] > flow_traffic[i]['relative_timestamp']
+                    # assert flow_traffic[i+1]['ordinal'] > flow_traffic[i]['ordinal']
+                    jitter.append((flow_traffic[i+1]['relative_timestamp'] - flow_traffic[i]['relative_timestamp']))
+                    flow_jitter[flow].append((flow_traffic[i+1]['relative_timestamp'] - flow_traffic[i]['relative_timestamp']))
+                    pkt_no.append(i)
+                except AssertionError:
+                    print("second packet count:", flow_traffic[i+1]['relative_timestamp'])
+                    print("first packet count:", flow_traffic[i]['relative_timestamp'])
+                    print("---------------------------------------------")
+        # ax = get_ax()
+        # ax.plot(pkt_no, flow_jitter)
+        # ax.set_xlabel('pkt number')
+        # ax.set_ylabel('jitter (ms)')
+        # if direction == "incoming":
+        #     plt.savefig("commandflowjitter.png")
+        # else:
+        #     plt.savefig("responseflowjitter.png")
+
+    return jitter
+
+def plot_command_flows(command_stats, commands, name, file):
+
+    fig = plt.figure()
+    ax = fig.add_subplot(1,1,1)
+    n = 10
+    color = iter(cm.rainbow(np.linspace(0,1,n)))
+    for command in commands:
+        c = next(color)
+        ax.scatter(command_stats[command]['input_duration'], command_stats[command]['input_size'], label=str(command)+" input flows", color=np.random.rand(3))
+        ax.scatter(command_stats[command]['output_duration'], command_stats[command]['output_size'],label=str(command) + " output flows", color=np.random.rand(3))
+    ax.set_ylabel("Flow size (bytes)")
+    ax.set_xlabel("Flow duration (seconds)")
+    file = Path(file) / name
+    file = str(file) + "flowsize.png"
+    plt.legend(loc='best')
+    plt.savefig(file)
+    plt.show()
+
+
+
+def plot_command_pkt_size_cdf(command_stats, save_folder):
+    ax = get_ax()
+    for command in command_stats:
+        if "on" in command and "alexa" not in command and "google" not in command:
+            pkt_sizes = sorted(command_stats[command]["input_sizes"])
+            pkt_sizes_cdf = np.arange(1, len(pkt_sizes) + 1) / len(pkt_sizes)
+            label = None
+            if "local" in command:
+                label = "local"
+            elif "lan" in command:
+                label = "lan"
+            elif "wan" in command:
+                label = "wan"
+            ax.plot(pkt_sizes, pkt_sizes_cdf, label=label)
+
+    ax.set_xlabel("jitter (ms)")
+    ax.set_ylabel("CDF")
+    # ax.plot(command_jitter_values, command_jitter_cdf, label='command jitter')
+    # ax.plot(command_response_jitter, command_response_cdf, label='response jitter')
+    plt.legend(loc='best')
+    plt.savefig(save_folder + "/on/pktsizecdf.png")
+    plt.show()
+
+
+
+
 def get_avg_input_stats(device_obj, mal_flows):
     # rates = []
     rate = 0
@@ -117,10 +277,13 @@ def get_avg_input_stats(device_obj, mal_flows):
     mal_flow_duration = []
     for flow in device_obj.input_flow_stats:
         if flow not in mal_flows:
-            rate += device_obj.input_flow_stats[flow]['byte rate']
-            pkt_rate += device_obj.input_flow_stats[flow]["pkt rate"]
             # rates.append(device_obj.input_flow_stats[flow]['byte rate'])
             # duration += device_obj.input_flow_stats[flow]['duration']
+            if device_obj.input_flow_stats[flow]["pkt rate"] is not None:
+                rate += device_obj.input_flow_stats[flow]['byte rate']
+                pkt_rate += device_obj.input_flow_stats[flow]["pkt rate"]
+            else:
+                pass
             size += device_obj.input_flow_stats[flow]["size"]
             benign_flow_sizes.append(device_obj.input_flow_stats[flow]['size'])
             benign_flow_duration.append(device_obj.input_flow_stats[flow]['duration'])
@@ -135,8 +298,8 @@ def get_avg_input_stats(device_obj, mal_flows):
     # print(len(device_obj.input_flow_stats.keys()))
     # print(size)
     return {
-        "avg_rate": rate/flows,
-        "pkt_rate": pkt_rate / flows,
+        # "avg_rate": rate/flows,
+        # "pkt_rate": pkt_rate / flows,
         "flows": flows,
         "size": size,
         "mal_flow_sizes": mal_flow_sizes,
@@ -152,6 +315,7 @@ def get_avg_output_stats(device_obj, mal_flows):
     flows = 0
     pkt_rate = 0
     size = 0
+    sizes = []
     benign_flow_sizes = []
     benign_flow_duration = []
     mal_flow_sizes = []
@@ -159,9 +323,12 @@ def get_avg_output_stats(device_obj, mal_flows):
     for flow in device_obj.output_flow_stats:
         flows += 1
         if flow not in mal_flows:
-            pkt_rate += device_obj.output_flow_stats[flow]["pkt rate"]
-            rate += device_obj.output_flow_stats[flow]['byte rate']
             size += device_obj.output_flow_stats[flow]["size"]
+            if device_obj.output_flow_stats[flow]["pkt rate"] is not None:
+                pkt_rate += device_obj.output_flow_stats[flow]["pkt rate"]
+                rate += device_obj.output_flow_stats[flow]['byte rate']
+            else:
+                pass
             benign_flow_sizes.append(device_obj.output_flow_stats[flow]['size'])
             benign_flow_duration.append(device_obj.output_flow_stats[flow]['duration'])
         elif flow in mal_flows:
@@ -169,8 +336,8 @@ def get_avg_output_stats(device_obj, mal_flows):
             mal_flow_duration.append(device_obj.output_flow_stats[flow]['duration'])
 
     return {
-        "avg_rate": rate / flows,
-        "pkt_rate": pkt_rate / flows,
+        # "avg_rate": rate / flows,
+        # "pkt_rate": pkt_rate / flows,
         "flows": flows,
         "size": size,
         "mal_flow_sizes": mal_flow_sizes,
@@ -208,24 +375,6 @@ def get_output_pkt_sizes(device_obj):
 
     return pkt_sizes
 
-def get_input_jitter(device_obj):
-    jitter = []
-    for flow in device_obj.flows['incoming']:
-        flow_jitter = []
-        flow_traffic = device_obj.flows['incoming'][flow]
-        if len(flow_traffic) > 1:
-            for i in range(0, len(flow_traffic)-1, 1):
-                try:
-                    assert flow_traffic[i+1]['relative_timestamp'].total_seconds() > flow_traffic[i]['relative_timestamp'].total_seconds()
-                    # assert flow_traffic[i+1]['ordinal'] > flow_traffic[i]['ordinal']
-                    flow_jitter.append(flow_traffic[i+1]['relative_timestamp'].total_seconds() - flow_traffic[i]['relative_timestamp'].total_seconds())
-                except AssertionError:
-                    print("second packet count:", flow_traffic[i+1]['relative_timestamp'].total_seconds())
-                    print("first packet count:", flow_traffic[i]['relative_timestamp'].total_seconds())
-                    print("---------------------------------------------")
-        jitter.append(np.average(flow_jitter))
-    print(jitter)
-
 
 def analyse_pkt_order(device_obj, direction):
     order = {}
@@ -234,7 +383,7 @@ def analyse_pkt_order(device_obj, direction):
         order[flow] = []
         pkt_list = device_obj.flows[direction][flow]
         for pkt in range(0,len(pkt_list)-1):
-            order[flow].append((pkt_list[pkt]['ordinal'], pkt_list[pkt]['relative_timestamp'].total_seconds()))
+            order[flow].append((pkt_list[pkt]['ordinal'], pkt_list[pkt]['relative_timestamp']))
             if pkt_list[pkt+1]['relative_timestamp'] < pkt_list[pkt]['relative_timestamp']:
                 print("flow tuple:",flow)
                 print("second pkt count:", pkt_list[pkt+1]['ordinal'], " relative_time:", pkt_list[pkt+1]['relative_timestamp'])
@@ -254,17 +403,19 @@ def pkt_size_cdf(input_pkt_sizes, output_pkt_sizes, file_name):
     output_p = np.arange(1, len(output_pkt_sizes)+1) / len(output_pkt_sizes)
 
     # plot the cdf
-    fig = plt.figure()
-    ax = fig.add_subplot(1, 1, 1)
+    ax = get_ax()
     ax.plot(input_pkt_sizes_sorted, input_p, label='input packets')
     ax.plot(output_pkt_sizes_sorted, output_p, label='output packets')
 
     ax.set_xlabel("Packet size (bytes)")
     ax.set_ylabel("CDF")
     plt.legend(loc='best')
-    file_name = file_name + "/pkt_size_cdf.png"
+    file_name = str(file_name) + "/pkt_size_cdf.png"
     plt.savefig(file_name)
     plt.show()
+
+
+
 
 def plot(x,y, file_name):
     fig = plt.figure()
@@ -272,7 +423,7 @@ def plot(x,y, file_name):
     ax.plot(x, y, label= "device traffic")
     ax.set_ylabel("traffic size (MB)")
     ax.set_xlabel("Time (days)")
-    file_name = file_name + "/devicetraffic.png"
+    file_name = str(file_name) + "/devicetraffic.png"
     plt.legend(loc='best')
     plt.savefig(file_name)
     plt.show()
@@ -300,7 +451,7 @@ def plot_flow_direction(time, input, output, plot_style, file_name):
 
 def plot_input_flow_graph(time,input, file_name):
     fig = plt.figure()
-    ax = fig.add_subplot(1,1,1)
+    ax = fig.add_subplot(1, 1, 1)
     file_name = file_name + "/inputtraffic.png"
     in_kb = []
     for value in input:
@@ -313,7 +464,7 @@ def plot_input_flow_graph(time,input, file_name):
 
 def plot_flow_size(benign_size, benign_duration, mal_size, mal_duration, direction, file_name, i):
     fig = plt.figure()
-    ax = fig.add_subplot(1,1,1)
+    ax = fig.add_subplot(1, 1, 1)
     if direction == "input":
         ax.scatter(benign_duration, benign_size, label="benign input flow")
         ax.scatter(mal_duration, mal_size, label="malicious input flow")
@@ -323,7 +474,7 @@ def plot_flow_size(benign_size, benign_duration, mal_size, mal_duration, directi
     ax.set_ylabel("flow size (KB)")
     ax.set_xlabel("Flow duration (seconds)")
     plt.legend(loc='best')
-    save_name = file_name + direction+ str(i) +"typecompare.png"
+    save_name = file_name + direction + str(i) + "typecompare.png"
     plt.savefig(save_name)
     plt.show()
 
