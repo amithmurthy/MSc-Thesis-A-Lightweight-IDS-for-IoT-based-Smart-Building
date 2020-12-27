@@ -1,18 +1,11 @@
 from network import NetworkTrace
 import networkx as nx
 import matplotlib.pyplot as plt
+from device import DeviceProfile
 
 """
 This class extracts the Packet Level Signature of remote control in IoT devices outlined in UC NDSS 2020 paper PINGPONG
 """
-
-class PacketSignature:
-
-    def __init__(self, device):
-        self.find_pairs()
-
-    def find_pairs(self, device_flows):
-        pass
 
 
 class GraphNetwork():

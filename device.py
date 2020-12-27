@@ -6,6 +6,7 @@ import numpy as np
 import itertools
 
 
+
 class DeviceProfile:
 
     def __init__(self, device_name, mac_address, ip_addrs, traffic):
@@ -56,7 +57,88 @@ class DeviceProfile:
         # self.plot_device_traffic()
         # self.compare_flow_direction_rate(True)
         # self.plot_flow_type()
-        # self.get_flow_pairs(flows)
+        self.set_flow_pairs(self.flows)
+
+
+    def extract_command_traffic_signatures(self):
+        tcp_flows = self.get_bidirectional_tcp_flows()
+        bidirectional_traffic = self.order_pkts_in_bidirectional_flow(tcp_flows)
+        self.get_pkt_pairs(bidirectional_traffic)
+
+    def get_bidirectional_tcp_flows(self):
+        tcp_flows = []
+        self.set_flow_pairs()
+        for flow_tuple in self.flow_pairs:
+            if flow_tuple[0][4] == "TCP" and flow_tuple[1][4] == "TCP":
+                tcp_flows.append(flow_tuple)
+
+        return tcp_flows
+
+    def order_pkts_in_bidirectional_flow(self, tcp_flows):
+        bidirectional_traffic = {flow_tuple: None for flow_tuple in tcp_flows}
+
+        for flow_tuple in tcp_flows:
+            input_pkts = self.flows['incoming'][flow_tuple[0]]
+            output_pkts = self.flows['outgoing'][flow_tuple[1]]
+            all_pkts = input_pkts + output_pkts
+            bidirectional_traffic[flow_tuple] = sorted(all_pkts, key = lambda i: i['relative_timestamp'])
+            # print(bidirectional_traffic[flow_tuple])
+
+        return bidirectional_traffic
+
+    def get_pkt_pairs(self, bidirectional_traffic):
+        connection_pkt_pairs = {connection: [] for connection in list(bidirectional_traffic.keys())}
+        test_dict = {connection: [] for connection in list(bidirectional_traffic.keys())}
+        mac_address = self.mac_address
+
+        def get_direction(self,connection_traffic,pkt):
+            if connection_traffic[pkt]['eth_src'] != mac_address:
+                pkt_direction = "S-->C"
+            elif connection_traffic[pkt]['eth_src'] == mac_address:
+                pkt_direction = "C-->S"
+            return pkt_direction
+
+        for flow in bidirectional_traffic:
+            connection_traffic = bidirectional_traffic[flow]
+            pair_ordinals = []
+            for pkt in range(0, len(connection_traffic)):
+                test_dict[flow].append(
+                    (connection_traffic[pkt]['ordinal'], connection_traffic[pkt]['tcp_data']['payload_len'])) # Logic validation purposes
+                this_pkt_ordinal = connection_traffic[pkt]['ordinal']
+                if this_pkt_ordinal in pair_ordinals:
+                    # if a packet is already in a pair, we don't form another pair with the same packet (implemented this way as the iteration step can vary
+                    # from 1 to 2 depending on packet directions in previous pair)
+                    # e.g if 2 packets are same direction p = (C-Pci, 0) or (S-Pci, 0) and Pci+1 is paired with Pci+2
+                    # which results in iteration step being 1. But if oppposite directions, iteration step = 2.
+                    continue
+
+                this_pkt_direction = get_direction(self,connection_traffic, pkt)
+
+                if pkt <= len(connection_traffic) - 2:
+                    next_pkt_direction = get_direction(self, connection_traffic, pkt + 1)
+                    next_pkt_ordinal = connection_traffic[pkt + 1]['ordinal']
+                    this_pkt = this_pkt_direction[0:2] + str(connection_traffic[pkt]['tcp_data']['payload_len'])
+                    next_pkt = next_pkt_direction[0:2] + str(connection_traffic[pkt + 1]['tcp_data']['payload_len'])
+                    if this_pkt_direction != next_pkt_direction:
+                        pair = (this_pkt, next_pkt)
+                        pair_ordinals.append((connection_traffic[pkt]['ordinal'], connection_traffic[pkt + 1]['ordinal']))
+                        connection_pkt_pairs[flow].append(pair)
+                        pair_ordinals.append(this_pkt_ordinal)
+                        pair_ordinals.append(next_pkt_ordinal)
+                    else:
+                        pair1 = (this_pkt, 0)
+                        connection_pkt_pairs[flow].append(pair1)
+                        pair_ordinals.append(this_pkt_ordinal)
+                else:
+                    pkt = this_pkt_direction[0:1] + str(connection_traffic[pkt]['tcp_data']['payload_len'])
+                    pkt_pair = (pkt, 0)
+                    connection_pkt_pairs[flow].append(pkt_pair)
+                    pair_ordinals.append(this_pkt_ordinal)
+
+        print("PACKET PAIRS")
+        print(connection_pkt_pairs)
+        print("pkts:", test_dict)
+
 
     def port_profile(self, device_traffic):
         """Port check"""
@@ -162,7 +244,7 @@ class DeviceProfile:
                         pkt_size_list.append(payload)
                     for i in range(0, int(duration) + 1, tick):
                         # print(pkt['relative_timestamp'].total_seconds())
-                        if i <= pkt_ts < i + 1:
+                        if (i <= pkt_ts < i + 1):
                             # self.flow_rate[flow][i] += payload
                             try:
                                 assert i <= int(duration)
@@ -227,9 +309,10 @@ class DeviceProfile:
                         self.output_flow_stats[flow]["byte rate"] = flow_size / duration
                         self.output_flow_stats[flow]["pkt rate"] = pkt_count / duration
                 except ZeroDivisionError:
-                    print("duration", duration)
-                    print("flow size:",flow_size)
-                    print("pkt count", pkt_count)
+                    # print("duration", duration)
+                    # print("flow size:",flow_size)
+                    # print("pkt count", pkt_count)
+                    print("ZeroDivision Error because flow duration is 0 - only 1 packet in flow")
                     pass
                     # if flow[-1] == "TCP":
                     #     avg_tcp_output_pkt_size.append(avg_pkt_size)
@@ -325,10 +408,10 @@ class DeviceProfile:
         plt.savefig(self.device_name + file_name)
         plt.show()
 
-    def get_flow_pairs(self, flows):
+    def set_flow_pairs(self):
         related_flows = []
-        for input in list(flows["incoming"].keys()):
-            for output in list(flows["outgoing"].keys()):
+        for input in list(self.flows["incoming"].keys()):
+            for output in list(self.flows["outgoing"].keys()):
                 if output == (input[1], input[0], input[3], input[2], input[4]):
                     # self.plot_pairs(input, output)
                     self.flow_pairs.append((input, output))
@@ -385,7 +468,6 @@ class DeviceProfile:
         ax2.set_ylabel("Avg jitter of packets (seconds)")
         fig2.legend('best')
         plt.savefig(self.device_name+"jitter_of_flow_direction.png")
-
 
     def plot_flow_pair_byte_rate(self):
         fig = plt.figure()
@@ -507,3 +589,26 @@ class DeviceProfile:
         ax.set_ylabel("Flow size (bytes)")
         plt.legend(loc='best')
         plt.savefig(self.device_name+"traffictypes.png")
+
+    def get_flow_jitter(self, flow):
+        """This function is intended mainly for analysing command traffic => return pkt number and its associated jitter in the flow"""
+        pkt_no = []
+        pkt_jitter = []
+        if len(flow) > 1:
+            for i in range(0, len(flow) -1, 1):
+                pkt_jitter.append((flow[i+1]['relative_timestamp'] - flow[i]['relative_timestamp']) * 1000) # in milliseconds
+                pkt_no.append(i)
+
+        return pkt_no, pkt_jitter
+
+    def compare_command_flow_direction_jitter(self, input_pkt_no, input_jitter, output_pkt_no, output_jitter, save_folder, iteration, location):
+        from tools import get_ax
+        ax = get_ax()
+        ax.plot(input_pkt_no, input_jitter, label='input flow')
+        ax.plot(output_pkt_no, output_jitter, label='output flow')
+        ax.set_ylabel("Jitter (ms)")
+        ax.set_xlabel("packet number")
+        plt.legend(loc="best")
+        print(save_folder)
+        plt.savefig(save_folder + location + "commandjitter" + str(iteration) + ".png")
+        print("flow jitter comparison plotted")

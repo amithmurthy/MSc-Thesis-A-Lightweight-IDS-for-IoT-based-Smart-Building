@@ -3,6 +3,8 @@ from scapy.layers.l2 import Ether, ARP
 from scapy.layers.inet import TCP,UDP, IP, ICMP
 from scapy.layers.inet6 import IPv6, IPv6ExtHdrFragment
 from scapy.layers.dns import *
+# import scapy.layers.tls.all
+from scapy.layers.tls import *
 from enum import Enum
 import time
 import pickle
@@ -43,7 +45,7 @@ def analyse_pcap(NetworkTraffic, file):
     count = 0
     # non_ip_packets = []
     first_pkt_time = None
-
+    tls_handshake_pkts = []
     for pkt_data, pkt_metadata in RawPcapReader(file):
         packet_data = {}
         count += 1
@@ -117,14 +119,16 @@ def analyse_pcap(NetworkTraffic, file):
                 src_port = None
                 dst_port = None
                 protocol = None
+
                 if TCP in ip_pkt:
                     packet_data["protocol"] = "TCP"
-                    packet_data['tcp_data'] = tcp_info(ip_pkt, ipv)
-                    try:
-                        assert packet_data['tcp_data']['payload_len'] <= 1500
-                    except AssertionError:
-                        print("count", count)
-                        print(file)
+                    packet_data['tcp_data'] = tcp_info(ip_pkt, ipv, count, tls_handshake_pkts)
+
+                    # try:
+                    #     assert packet_data['tcp_data']['payload_len'] <= 1500
+                    # except AssertionError:
+                    #     print("count", count)
+                    #     print(file)
                     src_port = packet_data['tcp_data']['src_port']
                     dst_port = packet_data['tcp_data']['dst_port']
                     protocol = "tcp_data"
@@ -152,6 +156,7 @@ def analyse_pcap(NetworkTraffic, file):
                 # elif ARP in ether_pkt:
                 #     packet_data["protocol"] = "ARP"
                 #     protocol = "ARP"
+
                 else:
                     packet_data["protocol"] = "not defined yet"
                     packet_data["payload_len"] = len(ip_pkt.payload)
@@ -209,28 +214,70 @@ def analyse_pcap(NetworkTraffic, file):
             break
     print("Finished", NetworkTraffic.file_name)
 
-def tcp_info(ip_pkt, ipv):
+
+
+def tcp_info(ip_pkt, ipv, count, tls_handshake_pkts):
     tcp_data = {}
     tcp_pkt = ip_pkt[TCP]
     tcp_data['src_port'] = tcp_pkt.sport
     tcp_data['dst_port'] = tcp_pkt.dport
     tcp_data['tcp_flags'] = str(tcp_pkt.flags)
-    tcp_payload_len = None
+    payload_len = None
 
     if ipv == 4:
-        tcp_payload_len = ip_pkt.len - (ip_pkt.ihl * 4) - (tcp_pkt.dataofs * 4)
+        payload_len = ip_pkt.len - (ip_pkt.ihl * 4) - (tcp_pkt.dataofs * 4)
     elif ipv == 6:
-        tcp_payload_len = ip_pkt.plen - (tcp_pkt.dataofs * 4)
+        payload_len = ip_pkt.plen - (tcp_pkt.dataofs * 4)
 
-    if tcp_payload_len is None:
-        tcp_payload_len = 0
-    tcp_data['payload_len'] = tcp_payload_len
 
-    if DNS in tcp_pkt:
-        dns_pkt = tcp_pkt[DNS]
-        print("DNS in TCP", dns_pkt.qr)
+    load_layer('tls')
+    if tcp_pkt.haslayer(TLS):
+        tls_pkt = tcp_pkt[TLS]
+        if tls_pkt.type != 23:
+            tls_handshake_pkts.append(count)
+        elif tls_pkt.type == 23:
+            payload_len = tls_pkt.len
+
+    else:
+        for layer in get_packet_layers(ip_pkt):
+            if layer.name == "Raw":
+                # tls_pkt = TLS(layer)
+                tls_pkt = bytes(tcp_pkt[Raw].load)
+                version = int.from_bytes(tls_pkt[1:3], 'big')
+                type = int.from_bytes(tls_pkt[0:1], 'big')
+                message_len = int.from_bytes(tls_pkt[3:5], 'big')
+                if type != 23:
+                    tls_handshake_pkts.append(count)
+                if message_len >= 1500:
+                    extra_tls_layers = TLS(tcp_pkt[Raw].load)
+                    # extra_tls_layers.show()
+                    # first_pkt = bytes(extra_tls_layers[0][Raw].load)
+                    if count - 1 in tls_handshake_pkts or count - 2 in tls_handshake_pkts:
+                        print("pkt type is handshake")
+                        continue
+                    if type != 23:
+                        continue
+                    if type == 23:
+                        print("application data", extra_tls_layers[0].deciphered_len, "count:", count)
+                # print("message_len:", message_len)
+                # print("tls check not passed but has raw", count, "len:", len(tls_pkt) - 5)
+                # print(version)
+                # print("type",type)
+
+    if payload_len is None:
+        payload_len = 0
+
+    tcp_data['payload_len'] = payload_len
+
+    # if DNS in tcp_pkt:
+    #     dns_pkt = tcp_pkt[DNS]
+    #     print("DNS in TCP", dns_pkt.qr)
 
     return tcp_data
+
+
+
+
 
 def udp_info(ip_pkt, ipv):
     udp_pkt = ip_pkt[UDP]

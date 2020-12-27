@@ -94,7 +94,6 @@ def analyse_device_events(file_path, device):
             # print(pcap.name)
             # if pcap.name[0:-5] in device_events[device][file.name]:
             print("analysing pcap", pcap.name)
-            print
             traffic_file = NetworkTrace(pcap, devices=iot_devices)
             analyse_pcap(traffic_file, FileIO(pcap))
             print("creating device objs from pcap")
@@ -104,8 +103,10 @@ def analyse_device_events(file_path, device):
                     iot_objects[command.name].append(device_obj)
                 else:
                     non_iot_objects[command.name].append(device_obj)
-    print("iot_objects:",iot_objects)
-    model_command_traffic(iot_objects, country, device)
+    # print("iot_objects:",iot_objects)
+    # model_command_traffic(iot_objects, country, device)
+    for device_obj in iot_objects["alexa_on"]:
+        device_obj.extract_command_traffic_signatures()
     # for command_name in iot_objects:
     #     # Saving graphs in appropriate folders i.e. accroding to the command
     #     save_graph_path = Path(plots_folder) / country / device / command_name
