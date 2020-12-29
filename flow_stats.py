@@ -6,8 +6,12 @@ from pathlib import Path
 import scipy.stats
 from tools import get_ax
 """"
-This module is for calculating stats and pon Device objects
+This module is for calculating stats and on Device objects
+
+TODO: move below methods into class ModelTrafficBehaviour. 
 """
+
+
 def model_device_behaviour(device_trafic_objects, dates,mal_flows, save_folder, behaviour_type):
     """
     :param device_trafic_objects: list of DeviceProfile objects which contain the traffic of the day

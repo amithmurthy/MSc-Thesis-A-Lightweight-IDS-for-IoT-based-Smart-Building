@@ -3,6 +3,7 @@ import trace_filtering
 import klepto as kl
 from device import DeviceProfile
 import math
+import re
 import time
 import matplotlib.pyplot as plt
 
@@ -94,6 +95,26 @@ def get_ax():
     fig = plt.figure()
     ax = fig.add_subplot(1, 1, 1)
     return ax
+
+def get_reorganised_command_traffic_dict(iot_objects):
+    commands = ["on", "off", "move", "brightness", "power", "color", "watch", "recording", "set", "photo"]
+    locations = ["lan", "wan"]
+    event_dict = {command: {location: [] for location in locations} for command in commands}
+    for command_name in iot_objects:
+        if "android" in command_name:
+            # Match the command name, location and controller to get keys for storing in command_stats dict
+            for name in commands:
+                if name in command_name:
+                    command = name
+            for loc in locations:
+                if re.search(loc, str(command_name)):
+                    location = loc
+            for device_obj in iot_objects[command_name]:
+                event_dict[command][location].append(device_obj)
+
+    return event_dict
+
+
 
 def get_iot_devices(country):
     """Returns a dictionary of IoT devices and their MAC address accroding to the folder in the Northeastern IMC 2019 Dataset.

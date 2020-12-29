@@ -4,7 +4,7 @@ from matplotlib.pyplot import cm
 from scipy.interpolate import make_interp_spline, BSpline
 import numpy as np
 import itertools
-
+from sklearn.cluster import DBSCAN
 
 
 class DeviceProfile:
@@ -14,7 +14,7 @@ class DeviceProfile:
         self.mac_address = mac_address
         self.ip_addrs = ip_addrs
         self.unique_ports = []
-        self.domains_accessed = []
+        # self.domains_accessed = []
         self.flow_direction_rate = {
             "incoming": None,
             "outgoing": None
@@ -26,6 +26,10 @@ class DeviceProfile:
         self.all_flow_tuples = None
         self.device_activity = None
         self.flows = traffic
+        self.pkt_pairs = None
+        self.pkt_sequences = None
+        self.distance = None
+
 
     def update_profile(self, malicious_pkts, benign_pkts):
         # self.port_profile(device_traffic)
@@ -63,7 +67,10 @@ class DeviceProfile:
     def extract_command_traffic_signatures(self):
         tcp_flows = self.get_bidirectional_tcp_flows()
         bidirectional_traffic = self.order_pkts_in_bidirectional_flow(tcp_flows)
-        self.get_pkt_pairs(bidirectional_traffic)
+        pkt_pairs = self.get_pkt_pairs(bidirectional_traffic)
+        pkt_sequences = self.get_pkt_sequences(pkt_pairs)
+        self.cluster_pairs(pkt_sequences)
+
 
     def get_bidirectional_tcp_flows(self):
         tcp_flows = []
@@ -88,10 +95,10 @@ class DeviceProfile:
 
     def get_pkt_pairs(self, bidirectional_traffic):
         connection_pkt_pairs = {connection: [] for connection in list(bidirectional_traffic.keys())}
-        test_dict = {connection: [] for connection in list(bidirectional_traffic.keys())}
+        # test_dict = {connection: [] for connection in list(bidirectional_traffic.keys())}
         mac_address = self.mac_address
 
-        def get_direction(self,connection_traffic,pkt):
+        def get_direction(connection_traffic,pkt):
             if connection_traffic[pkt]['eth_src'] != mac_address:
                 pkt_direction = "S-->C"
             elif connection_traffic[pkt]['eth_src'] == mac_address:
@@ -102,20 +109,19 @@ class DeviceProfile:
             connection_traffic = bidirectional_traffic[flow]
             pair_ordinals = []
             for pkt in range(0, len(connection_traffic)):
-                test_dict[flow].append(
-                    (connection_traffic[pkt]['ordinal'], connection_traffic[pkt]['tcp_data']['payload_len'])) # Logic validation purposes
+                # test_dict[flow].append(
+                #     (connection_traffic[pkt]['ordinal'], connection_traffic[pkt]['tcp_data']['payload_len'])) # Logic validation purposes
                 this_pkt_ordinal = connection_traffic[pkt]['ordinal']
                 if this_pkt_ordinal in pair_ordinals:
-                    # if a packet is already in a pair, we don't form another pair with the same packet (implemented this way as the iteration step can vary
-                    # from 1 to 2 depending on packet directions in previous pair)
-                    # e.g if 2 packets are same direction p = (C-Pci, 0) or (S-Pci, 0) and Pci+1 is paired with Pci+2
-                    # which results in iteration step being 1. But if oppposite directions, iteration step = 2.
+                    """ if a packet is already in a pair, we don't form another pair with the same packet (implemented this way as the iteration step can vary
+                    from 1 to 2 depending on packet directions in previous pair)
+                    e.g if 2 packets are same direction p = (C-Pci, 0) or (S-Pci, 0) and Pci+1 is paired with Pci+2
+                    which results in iteration step being 1. But if oppposite directions, iteration step = 2."""
                     continue
 
-                this_pkt_direction = get_direction(self,connection_traffic, pkt)
-
+                this_pkt_direction = get_direction(connection_traffic, pkt)
                 if pkt <= len(connection_traffic) - 2:
-                    next_pkt_direction = get_direction(self, connection_traffic, pkt + 1)
+                    next_pkt_direction = get_direction(connection_traffic, pkt + 1)
                     next_pkt_ordinal = connection_traffic[pkt + 1]['ordinal']
                     this_pkt = this_pkt_direction[0:2] + str(connection_traffic[pkt]['tcp_data']['payload_len'])
                     next_pkt = next_pkt_direction[0:2] + str(connection_traffic[pkt + 1]['tcp_data']['payload_len'])
@@ -135,9 +141,56 @@ class DeviceProfile:
                     connection_pkt_pairs[flow].append(pkt_pair)
                     pair_ordinals.append(this_pkt_ordinal)
 
-        print("PACKET PAIRS")
-        print(connection_pkt_pairs)
-        print("pkts:", test_dict)
+        return connection_pkt_pairs
+
+    def get_pkt_sequences(self, connection_pkt_pairs):
+
+        connection_pkt_sequences = {connection: [] for connection in list(connection_pkt_pairs.keys())}
+
+        for flow in connection_pkt_pairs:
+            sequenced_pairs_index = []
+            pkt_index = 0
+            i = 0
+            while i < len(connection_pkt_pairs[flow]):
+                # print(sequenced_pairs_index)
+                p1 = connection_pkt_pairs[flow][i]
+                if i <= len(connection_pkt_pairs[flow]) - 2:
+                    p2 = connection_pkt_pairs[flow][i + 1]
+                if i == len(connection_pkt_pairs[flow]) - 1:
+                    break
+                if i in sequenced_pairs_index:
+                    continue
+                seq_len = 0
+                p1_pkt = pkt_index
+                if 0 in p1:
+                    seq_len += 1
+                    # i = 1
+                    # pkt_index += 1
+                if 0 not in p1:
+                    seq_len += 2
+                p2_pkt = p1_pkt + seq_len
+                # check whether p1 is before p2
+                if p1_pkt == p2_pkt - seq_len:
+                    # print("sequence pairs:", p1, p2)
+                    sequenced_pairs_index.append(i)
+                    sequenced_pairs_index.append(i + 1)
+                    step = 2
+                    connection_pkt_sequences[flow].append((p1, p2))
+                    if 0 in p2:
+                        seq_len += 1
+                    if 0 not in p2:
+                        seq_len += 2
+                else:
+                    step = 1
+                pkt_index += seq_len
+                i = i + step
+
+    def cluster_pairs(self, pkt_sequences):
+        for flow in pkt_sequences:
+            sequence = pkt_sequences[flow]
+            for pairs in sequence:
+                p1 = pairs[0]
+                p2 = pairs[1]
 
 
     def port_profile(self, device_traffic):
@@ -256,14 +309,6 @@ class DeviceProfile:
                     pkt_count += 1
 
                 avg_pkt_size = flow_size / pkt_count
-                # self.flow_stats[flow]["size"] = flow_size
-                # self.flow_stats[flow]["duration"] = duration
-                # self.flow_stats[flow]["byte rate"] = flow_size / duration
-                # self.flow_stats[flow]["pkt rate"] = pkt_count / duration
-                # self.flow_stats[flow]["avg packet size"] = avg_pkt_size
-                # pkt_size_list = np.array(pkt_size_list)
-                # self.flow_stats[flow]["mean packet size"] = pkt_size_list.mean()
-
                 # pair_count = 0
                 d = 0
                 for i in range(0,len(pkt_times)-1 , 1):
@@ -273,14 +318,6 @@ class DeviceProfile:
                     inter_pkt_arrival = d / (len(pkt_times) - 1)
                 else:
                     inter_pkt_arrival = 0
-                # print(inter_pkt_arrival)
-                # test = d / (len(pkt_times) - 1)
-                # if inter_pkt_arrival != test:
-                #     print("test doesn't work")
-                # if len(pkt_size_list) > 0:
-                #     avg_pkt_size = sum(pkt_size_list) / len(pkt_size_list)
-                # else:
-                #     avg_pkt_size = 0
 
                 """"Lists for graphs"""
                 try:
@@ -308,18 +345,19 @@ class DeviceProfile:
                         self.output_flow_stats[flow]['flow type'] = flow_type
                         self.output_flow_stats[flow]["byte rate"] = flow_size / duration
                         self.output_flow_stats[flow]["pkt rate"] = pkt_count / duration
+                        # if flow[-1] == "TCP":
+                        #     avg_tcp_output_pkt_size.append(avg_pkt_size)
+                        #     output_tcp_flow_duration.append(duration)
+                        # elif flow[-1] == "UDP":
+                        #     avg_udp_output_pkt_size.append(avg_pkt_size)
+                        #     output_udp_flow_duration.append(duration)
                 except ZeroDivisionError:
                     # print("duration", duration)
                     # print("flow size:",flow_size)
                     # print("pkt count", pkt_count)
                     print("ZeroDivision Error because flow duration is 0 - only 1 packet in flow")
                     pass
-                    # if flow[-1] == "TCP":
-                    #     avg_tcp_output_pkt_size.append(avg_pkt_size)
-                    #     output_tcp_flow_duration.append(duration)
-                    # elif flow[-1] == "UDP":
-                    #     avg_udp_output_pkt_size.append(avg_pkt_size)
-                    #     output_udp_flow_duration.append(duration)
+
 
         # tcp_stats = [avg_tcp_input_pkt_size, input_tcp_flow_duration, avg_tcp_output_pkt_size, output_tcp_flow_duration]
         # udp_stats = [avg_udp_input_pkt_size, input_udp_flow_duration, avg_udp_output_pkt_size, output_udp_flow_duration]

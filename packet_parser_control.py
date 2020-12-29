@@ -75,14 +75,15 @@ def analyse_device_events(file_path, device):
     command_folders = Path(dir_path)
     country = str(file_path)[-2:] # either the us or uk depends on the file path
     iot_devices = get_iot_devices(country)
-    # for obj in iot_devices:
-    #     path = r"C:\Users\amith\Documents\Uni\Masters\Implementation\commands"
-    #     path = Path(path) / country / obj
-    #     folder = Path(path)
-    #     if folder.is_dir():
-    #         pass
-    #     else:
-    #         folder.mkdir()
+    def create_folders():
+        for obj in iot_devices:
+            path = r"C:\Users\amith\Documents\Uni\Masters\Implementation\commands"
+            path = Path(path) / country / obj
+            folder = Path(path)
+            if folder.is_dir():
+                pass
+            else:
+                folder.mkdir()
     iot_objects = {}
     non_iot_objects = {}
     for command in command_folders.iterdir():
@@ -105,8 +106,10 @@ def analyse_device_events(file_path, device):
                     non_iot_objects[command.name].append(device_obj)
     # print("iot_objects:",iot_objects)
     # model_command_traffic(iot_objects, country, device)
-    for device_obj in iot_objects["alexa_on"]:
-        device_obj.extract_command_traffic_signatures()
+
+    event_traffic = get_reorganised_command_traffic_dict(iot_objects)
+    PacketLevelSignature(event_traffic)
+
     # for command_name in iot_objects:
     #     # Saving graphs in appropriate folders i.e. accroding to the command
     #     save_graph_path = Path(plots_folder) / country / device / command_name
@@ -125,6 +128,8 @@ def main():
     process_moniotr_file_path = r"C:\Users\amith\Documents\Uni\Masters\processed-traffic\moniotr"
     northeastern_dataset_uk = r"D:\Mon(IoT)r\iot-data\uk"
     analyse_device_events(northeastern_dataset_uk, "tplink-plug")
+
+
     # devices = get_iot_devices("uk")
     # for device in devices:
     #     if device != "yi-camera" or device != "tplink-plug":
