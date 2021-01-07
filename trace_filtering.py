@@ -14,14 +14,12 @@ import shelve
 import klepto as kl
 from network import NetworkTrace
 from datetime import datetime, date, timedelta
-from packet_level_signature import GraphNetwork
 from device import DeviceProfile
 from tools import *
 
 
 """Gloabl variables"""
-count_limit = False
-device_filter = False
+
 
 class PktDirection(Enum):
     not_defined = 0
@@ -34,14 +32,21 @@ class PktDirection(Enum):
     local_to_local = 7
     local_to_internet = 8
 
-def analyse_pcap(NetworkTraffic, file):
+def analyse_pcap(NetworkTraffic, file, **kwargs):
 
-    # Count limit is to limit processing for testing logic
-    if count_limit is True:
-        # No of packets to process
-        limit = 100000
+    # device_filter = False
+
+    # Count limit is to limit processing for testing logic. if passed as an arguement, use arguement value as limit
+    if 'count_limit' in kwargs.keys():
+        count_limit = kwargs['count_limit']
     else:
-        limit = math.inf
+        count_limit = math.inf
+    if 'ttl' in kwargs.keys():
+        ttl_filter = True
+    else:
+        ttl_filter = False
+
+
     count = 0
     # non_ip_packets = []
     first_pkt_time = None
@@ -49,7 +54,7 @@ def analyse_pcap(NetworkTraffic, file):
     for pkt_data, pkt_metadata in RawPcapReader(file):
         packet_data = {}
         count += 1
-        if count <= limit:
+        if count <= count_limit:
             ether_pkt = Ether(pkt_data)
             """ MAC Address and IP address extraction and sorting traffic to each device """
             # if device_filter is True:
@@ -89,10 +94,10 @@ def analyse_pcap(NetworkTraffic, file):
             else:
                 continue
 
+
             if ipv is not None:
                 if ether_pkt.src not in list(NetworkTraffic.mac_to_ip.keys()):
                     NetworkTraffic.mac_to_ip[ether_pkt.src] = []
-
                     NetworkTraffic.mac_to_ip[ether_pkt.src].append(ip_pkt.src)
                 elif ether_pkt.src in list(NetworkTraffic.mac_to_ip.keys()):
                     if ip_pkt.src not in NetworkTraffic.mac_to_ip[ether_pkt.src]:
@@ -112,7 +117,11 @@ def analyse_pcap(NetworkTraffic, file):
                 packet_data['ip_src'] = ip_pkt.src
                 packet_data['ip_dst'] = ip_pkt.dst
                 packet_data['direction'] = get_pkt_direction(NetworkTraffic,ether_pkt)
-
+                if ttl_filter is True:
+                    if ipv == 4:
+                        packet_data['ttl'] = ip_pkt.ttl
+                    elif ipv == 6:
+                        packet_data['ttl'] = ip_pkt.hlim
                 """
                 Perform TCP info check -> returns a list of features which is added to packet_data['tcp info']
                 """
@@ -164,6 +173,11 @@ def analyse_pcap(NetworkTraffic, file):
                     # for layer in get_packet_layers(ether_pkt):
                     #     print(layer.name,"/")
 
+                try:
+                    assert len(ip_pkt) <= 1500
+                except AssertionError:
+                    log("pkt_len", count, packet_data['relative_timestamp'], len(ip_pkt))
+
                 # print(type(packet_data['relative_timestamp']) is float)
                 # print(count, ":", packet_data['relative_timestamp'])
 
@@ -212,8 +226,8 @@ def analyse_pcap(NetworkTraffic, file):
                     print(count)
         else:
             break
-    print("Finished", NetworkTraffic.file_name)
 
+    print("Finished", NetworkTraffic.file_name)
 
 
 def tcp_info(ip_pkt, ipv, count, tls_handshake_pkts):
@@ -229,36 +243,39 @@ def tcp_info(ip_pkt, ipv, count, tls_handshake_pkts):
     elif ipv == 6:
         payload_len = ip_pkt.plen - (tcp_pkt.dataofs * 4)
 
-
     load_layer('tls')
     if tcp_pkt.haslayer(TLS):
-        tls_pkt = tcp_pkt[TLS]
-        if tls_pkt.type != 23:
-            tls_handshake_pkts.append(count)
-        elif tls_pkt.type == 23:
-            payload_len = tls_pkt.len
-
+        def handle_tls_pkt():
+            tls_pkt = tcp_pkt[TLS]
+            if tls_pkt.type != 23:
+                tls_handshake_pkts.append(count)
+            elif tls_pkt.type == 23:
+                payload_len = tls_pkt.len
     else:
-        for layer in get_packet_layers(ip_pkt):
-            if layer.name == "Raw":
-                # tls_pkt = TLS(layer)
-                tls_pkt = bytes(tcp_pkt[Raw].load)
-                version = int.from_bytes(tls_pkt[1:3], 'big')
-                type = int.from_bytes(tls_pkt[0:1], 'big')
-                message_len = int.from_bytes(tls_pkt[3:5], 'big')
-                if type != 23:
-                    tls_handshake_pkts.append(count)
-                if message_len >= 1500:
-                    extra_tls_layers = TLS(tcp_pkt[Raw].load)
-                    # extra_tls_layers.show()
-                    # first_pkt = bytes(extra_tls_layers[0][Raw].load)
-                    if count - 1 in tls_handshake_pkts or count - 2 in tls_handshake_pkts:
-                        print("pkt type is handshake")
-                        continue
+        pass
+        def analyse_layer():
+            for layer in get_packet_layers(ip_pkt):
+                if layer.name == "Raw":
+                    # tls_pkt = TLS(layer)
+                    tls_pkt = bytes(tcp_pkt[Raw].load)
+                    version = int.from_bytes(tls_pkt[1:3], 'big')
+                    type = int.from_bytes(tls_pkt[0:1], 'big')
+                    message_len = int.from_bytes(tls_pkt[3:5], 'big')
                     if type != 23:
-                        continue
-                    if type == 23:
-                        print("application data", extra_tls_layers[0].deciphered_len, "count:", count)
+                        tls_handshake_pkts.append(count)
+                    if message_len >= 1500:
+                        # extra_tls_layers = TLS(tcp_pkt[Raw].load)
+                        # extra_tls_layers.show()
+                        # first_pkt = bytes(extra_tls_layers[0][Raw].load)
+                        if count - 1 in tls_handshake_pkts or count - 2 in tls_handshake_pkts:
+                            log("tls_handshake", count, "unknown")
+                            continue
+                        if type != 23:
+                            continue
+                        # if type == 23:
+                            # print("application data", extra_tls_layers[0].deciphered_len, "count:", count)
+                        else:
+                            continue
                 # print("message_len:", message_len)
                 # print("tls check not passed but has raw", count, "len:", len(tls_pkt) - 5)
                 # print(version)
@@ -275,15 +292,10 @@ def tcp_info(ip_pkt, ipv, count, tls_handshake_pkts):
 
     return tcp_data
 
-
-
-
-
 def udp_info(ip_pkt, ipv):
     udp_pkt = ip_pkt[UDP]
     udp_data = {'src_port': udp_pkt.sport, 'dst_port': udp_pkt.dport, 'payload_len': udp_pkt.len - 8}
     # UDP header is fixed at 8 bytes. Length field specifies length of header + data => len - 8 = payload
-    assert udp_pkt.len - 8 <= 1500
     return udp_data
 
 def icmp_info(ip_pkt, ipv):

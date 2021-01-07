@@ -59,8 +59,8 @@ def analyse_dataset(dataset, save_path,malicious_pkts,benign_pkts):
 
     for file in get_pcaps(dataset):
         print(file)
-        if str(file)[-13:-5] in large_attack_files:
-            continue
+        # if str(file)[-13:-5] in large_attack_files:
+        #     continue
         traffic_file = NetworkTrace(file)
         analyse_pcap(traffic_file, FileIO(file))
         print("creating device objects")
@@ -75,9 +75,9 @@ def analyse_device_events(file_path, device):
     command_folders = Path(dir_path)
     country = str(file_path)[-2:] # either the us or uk depends on the file path
     iot_devices = get_iot_devices(country)
+    path = r"C:\Users\amith\Documents\Uni\Masters\Implementation\commands"
     def create_folders():
         for obj in iot_devices:
-            path = r"C:\Users\amith\Documents\Uni\Masters\Implementation\commands"
             path = Path(path) / country / obj
             folder = Path(path)
             if folder.is_dir():
@@ -96,7 +96,7 @@ def analyse_device_events(file_path, device):
             # if pcap.name[0:-5] in device_events[device][file.name]:
             print("analysing pcap", pcap.name)
             traffic_file = NetworkTrace(pcap, devices=iot_devices)
-            analyse_pcap(traffic_file, FileIO(pcap))
+            analyse_pcap(traffic_file, FileIO(pcap), ttl = "ttl")
             print("creating device objs from pcap")
             device_list = get_device_objects(traffic_file, [], [])
             for device_obj in device_list:
@@ -105,29 +105,38 @@ def analyse_device_events(file_path, device):
                 else:
                     non_iot_objects[command.name].append(device_obj)
     # print("iot_objects:",iot_objects)
-    # model_command_traffic(iot_objects, country, device)
 
     event_traffic = get_reorganised_command_traffic_dict(iot_objects)
-    PacketLevelSignature(event_traffic)
+    device_command_signature = PacketLevelSignature(event_traffic)
+    device_command_signature.cluster_event_traffic("on")
+    def make_command_plot_folders():
+        for command_name in event_traffic:
+            # Saving graphs in appropriate folders i.e. accroding to the command
+            if len(event_traffic[command_name]['lan']) > 0 or len(event_traffic[command_name]['wan']) > 0:
+                save_graph_path = Path(path) / country / device / command_name
+                save_folder = Path(save_graph_path)
+                if save_folder.is_dir():
+                    pass
+                else:
+                    save_folder.mkdir()
+                # plot_command_traffic = model_device_behaviour(device_trafic_objects=iot_objects[command_name], dates=None, mal_flows={}, save_folder=save_folder, behaviour_type="benign")
+                # if plot_command_traffic:
+                #     print(plot_command_traffic)
+                #     continue
+    # make_command_plot_folders()
+    # model_command_traffic(iot_objects, country, device, path)
 
-    # for command_name in iot_objects:
-    #     # Saving graphs in appropriate folders i.e. accroding to the command
-    #     save_graph_path = Path(plots_folder) / country / device / command_name
-    #     save_folder = Path(save_graph_path)
-    #     if save_folder.is_dir():
-    #         pass
-    #     else:
-    #         save_folder.mkdir()
-    #     plot_command_traffic = model_device_behaviour(device_trafic_objects=iot_objects[command_name], dates=None, mal_flows={}, save_folder=save_folder, behaviour_type="benign")
-    #     if plot_command_traffic:
-    #         print(plot_command_traffic)
-    #         continue
 
+def cluster_device_signature_over_time(processed_traffic_path):
+    network_instances = unpickle_network_trace_and_device_obj(processed_traffic_path, 1)
+    for network_obj in network_instances:
+        for device_obj in network_instances[network_obj]:
+            device_obj.update_profile([],[], False)
+            device_obj.set_device_activity()
 
 def main():
     process_moniotr_file_path = r"C:\Users\amith\Documents\Uni\Masters\processed-traffic\moniotr"
     northeastern_dataset_uk = r"D:\Mon(IoT)r\iot-data\uk"
-    analyse_device_events(northeastern_dataset_uk, "tplink-plug")
 
 
     # devices = get_iot_devices("uk")
@@ -143,8 +152,8 @@ def main():
     benign_dataset = r"C:\Users\amith\Documents\Uni\Masters\Datasets\UNSW\2018\Benign Data"
     # attack_file = "18-10-20.pcap"
     # benign_file = "18-10-29.pcap"
-    # test_file = "16-09-23.pcap"
-    # pcap_file = NetworkTrace(test_file)
+    test_file = "16-09-23.pcap"
+
     # analyse_pcap(pcap_file, "16-09-23.pcap")
     malicious_pkts = []
     benign_pkts = []
@@ -155,51 +164,55 @@ def main():
     #     benign_pkts = pickle.load(pickle_fd)
     #     pkt_rmse = pickle.load(pickle_fd)
 
-    save_attack_file_path = r"C:\Users\amith\Documents\Uni\Masters\processed-traffic\Attack"
-    save_benign_file_path = r"C:\Users\amith\Documents\Uni\Masters\processed-traffic\Benign"
-    save_dataset1_file_path = r"C:\Users\amith\Documents\Uni\Masters\processed-traffic\2016"
+    processed_attack_trafffic = r"C:\Users\amith\Documents\Uni\Masters\processed-traffic\Attack"
+    processed_benign_traffic = r"C:\Users\amith\Documents\Uni\Masters\processed-traffic\Benign"
+    processed_benign_2016 = r"C:\Users\amith\Documents\Uni\Masters\processed-traffic\2016"
 
-    # analyse_dataset(attack_dataset, attack_file_path, malicious_pkts, benign_pkts)
-    processed = ["Dropcam", "Amazon Echo", "Netatmo Welcom", "TP-Link Day Night Cloud camera", "Samsung SmartCam"]
+    # analyse_dataset(benign_dataset, processed_benign_traffic, malicious_pkts, benign_pkts)
+    # processed = ["Dropcam", "Amazon Echo", "Netatmo Welcom", "TP-Link Day Night Cloud camera", "Samsung SmartCam"]
 
-
-    malicious_flows = get_malicious_flows(r"C:\Users\amith\Documents\Uni\Masters\Datasets\UNSW\2018\annotations\annotations")
+    cluster_device_signature_over_time(processed_benign_traffic)
+    # malicious_flows = get_malicious_flows(r"C:\Users\amith\Documents\Uni\Masters\Datasets\UNSW\2018\annotations\annotations")
 
 
     dates = ["2018-06-01","2018-06-02", "2018-06-03", "2018-06-04","2018-06-06", "2018-06-07","2018-06-08"]
-    mal_keys = list(malicious_flows.keys())
-    # for device in infected_devices:
-    #     traffic_objects, dates = unpickle_objects(attack_file_path, device)
-    #     for date in dates:
-    #         # if date in mal_keys:
-    #         make_graphs = model_device_behaviour(traffic_objects, date, malicious_flows)
-    #         if make_graphs:
-    #             print(make_graphs)
-    #             break
-    # traffic_objts, dates = unpickle_objects(dataset1_file_path, "Dropcam")
-    # for date in dates:
-    #     if date in mal_keys:
-    # print(len(traffic_objts))
-    # get_graphs = model_device_behaviour(traffic_objts, dates, malicious_flows)
+    # mal_keys = list(malicious_flows.keys())
 
-        # print(traffic_objects)
-        # print(dates)
-        # print(len(traffic_objects))
-        # print(len(dates))
+    # def process_attack_traffic():
+    #     for device in infected_devices:
+    #         traffic_objects, dates = unpickle_device_objects(processed_attack_trafffic, device)
+    #         for date in dates:
+    #             # if date in mal_keys:
+    #             make_graphs = model_device_behaviour(traffic_objects, date, malicious_flows)
+    #             if make_graphs:
+    #                 print(make_graphs)
+    #                 break
 
-    # thread = threading.Thread(target=analyse_pcap(pcap_file, test_file))
+    # def process_benign_traffic():
+    #     for device in iot:
+    #         print(device)
+    #         device_objs, dates = unpickle_device_objects(processed_benign_traffic, device)
+    #         # print(x)
+    #         # make_graphs = model_device_behaviour(x,dates , mal_flows={})
+
+
+    # tp_link_traffic, network_trace = unpickle_device_objects(processed_benign_traffic, "TP-Link Smart plug", "benign")
+    # if len(tp_link_traffic) == len(network_trace):
+    #     for i in range(0, len(tp_link_traffic)):
+    #         tp_link_traffic[i].update_profile([],[])
+    #         # tp_link_traffic[i].sort_flow_location(network_trace[i])
+    #         tp_link_traffic[i].compare_flow_location_traffic()
+    #
+    # pcap = NetworkTrace(test_file)
+    # thread = threading.Thread(target=analyse_pcap(pcap, test_file, count_limit=100000))
     # thread.start()
     # thread.join()
-    # for device in iot:
-    #     if device == "iHome":
-    #         print(device)
-    #         x, dates = unpickle_objects(dataset1_file_path, device)
-    #         print(x)
-    #         make_graphs = model_device_behaviour(x,dates , mal_flows={})
-    #         if make_graphs:
-    #             print(make_graphs)
-    #     else:
-    #         continue
+    # device_objs = get_device_objects(pcap, [], [])
+    # for device in device_objs:
+    #     device.update_profile([],[])
+        # device.sort_flow_location(pcap)
+        # device.compare_flow_location_traffic()
+    # device_signature_plots(device_objs)
 
 if __name__ == "__main__":
     main()
@@ -218,5 +231,5 @@ if __name__ == "__main__":
 
     # create_device_plots(devices,malicious_pkts, benign_pkts)
 
-    # devices_objs = unpickle_objects(file_path, "16-09-23")
+    # devices_objs = unpickle_device_objects(file_path, "16-09-23")
     # print(devices_objs)

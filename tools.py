@@ -6,6 +6,8 @@ import math
 import re
 import time
 import matplotlib.pyplot as plt
+import logging
+logging.basicConfig(level=logging.INFO)
 
 
 def halve_dict(large_dict):
@@ -27,11 +29,13 @@ def save_traffic(NetworkTraffic, file_path,devices):
         trace_filtering.shelve_device_traffic(device, path+'\_' +device.device_name + "-db")
 
 
-def unpickle_objects(file_path, device_filter):
-    path = file_path
-    database = Path(path)
+def unpickle_device_objects(file_path, device_filter, dataset_type):
+    """Loads processed traffic and returns device objects for a specific device, and network object for each tracefile"""
+
+    database = Path(file_path)
     import re
     device_objects = []
+    network_objects = []
     count = 0
     limit = 2 #This is for logic testing purposes  math.inf
     files = []
@@ -39,6 +43,7 @@ def unpickle_objects(file_path, device_filter):
         count += 1
         if count > limit:
             break
+        network_trace_file_path = file_path+'\_'+str(network_trace)[-8:]
         for device_folder in network_trace.iterdir():
             # print(device_folder)
             file_name = re.search('_(.+?)-db', device_folder.name)
@@ -46,11 +51,53 @@ def unpickle_objects(file_path, device_filter):
                 device_name = file_name.group(1)
                 if device_name == device_filter:
                     files.append("20" + str(network_trace)[-8:])
-                    device_obj = open_archive(path+'\_'+str(network_trace)[-8:]+'\_'+device_name+'-db')
+                    device_obj = open_device_archive(network_trace_file_path+'\_'+device_name+'-db')
                     device_objects.append(device_obj)
-    return device_objects, files
+                    network_obj = open_network_archive(network_trace_file_path + "/_network_info", str(network_trace)[-8:] + ".pcap")
+                    network_objects.append(network_obj)
 
-def open_archive(directory):
+    if dataset_type == "benign":
+        return device_objects, network_objects
+    else:
+        return device_objects, network_objects, files
+
+
+def unpickle_network_trace_and_device_obj(file_path, *limit):
+    network_trace_devices = {}
+    database = Path(file_path)
+    count = 0
+    limit = limit[0] if limit else 6
+    for network_trace in database.iterdir():
+        count += 1
+        if count > limit:
+            break
+        network_trace_file_path = file_path + '\_' + str(network_trace)[-8:]
+        network_obj = open_network_archive(network_trace_file_path + "/_network_info",
+                                           str(network_trace)[-8:] + ".pcap")
+        network_trace_devices[network_obj] = []
+        print(network_trace)
+        for device_folder in network_trace.iterdir():
+            file_name = re.search('_(.+?)-db', device_folder.name)
+            if file_name:
+                device_name = file_name.group(1)
+                if "Router" in device_name:
+                    continue
+                print(device_name)
+                device_obj = open_device_archive(network_trace_file_path + '\_' + device_name + '-db')
+                network_trace_devices[network_obj].append(device_obj)
+
+    return network_trace_devices
+
+
+
+
+
+def open_network_archive(directory, file_name):
+    d = kl.archives.dir_archive(name=directory, serialized= True)
+    d.load('mac_to_ip')
+    from network import NetworkTrace
+    return NetworkTrace(file_name, None, d['mac_to_ip'])
+def open_device_archive(directory):
     # print(directory)
     d = kl.archives.dir_archive(name=directory, serialized = True)
     # print(d.archive._keydict())
@@ -114,7 +161,20 @@ def get_reorganised_command_traffic_dict(iot_objects):
 
     return event_dict
 
+def logged(func):
+    def wrapper(*args, **kwargs):
+        try:
+            logging.info("funciton '{0}', info: {1} and {2}".format(func.__name__, args, kwargs))
+            return func(*args, **kwargs)
+        except Exception as e:
+            logging.exception(e)
+    return wrapper
 
+def log(type, pkt_ordinal, pkt_time, *len):
+    if type == "pkt_len":
+        logging.info("packet greater than 1500 bytes; ordinal:{0}, timestamp:{1}, ip pkt size: {2}".format(pkt_ordinal, pkt_time, len))
+    elif type == "tls_handshake":
+        logging.info("tls handshake pkt; ordinal:{0}".format(pkt_ordinal))
 
 def get_iot_devices(country):
     """Returns a dictionary of IoT devices and their MAC address accroding to the folder in the Northeastern IMC 2019 Dataset.
@@ -122,9 +182,9 @@ def get_iot_devices(country):
     uk_wired = ["bosiwo-camera-wired", "wansview-cam-wired"]
     uk_iot_devices = {
         "tplink-plug": "50:c7:bf:b1:d2:78",
-        "bosiwo-camera-wired":"ae:ca:06:0e:ec:89",
+        # "bosiwo-camera-wired":"ae:ca:06:0e:ec:89",
         "blink-camera":"f4:b8:5e:68:8f:35",
-        "charger-camera":"fc:ee:e6:2e:23:a3",
+        # "charger-camera":"fc:ee:e6:2e:23:a3",
         "honeywell-thermostat": "b8:2c:a0:28:3e:6b",
         "magichome-strip": "dc:4f:22:89:fc:e7",
         "nest-tstat": "64:16:66:2a:98:62",
@@ -133,7 +193,7 @@ def get_iot_devices(country):
         "tplink-bulb":"50:c7:bf:ca:3f:9d",
         "t-wemo-plug":"58:ef:68:99:7d:ed",
         "wansview-cam-wired":"78:a5:dd:28:a1:b7",
-        "yi-camera": "0c:8c:24:0b:be:fb"
+        "yi-camera": "0c:8c:24:0b:be:fb",
     }
     us_iot_devices = {
         "phillips-bulb": "34:ce:00:99:9b:83",

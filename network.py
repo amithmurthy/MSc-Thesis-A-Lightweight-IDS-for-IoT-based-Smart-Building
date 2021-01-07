@@ -6,12 +6,16 @@ import logging
 
 
 class NetworkTrace:
-    def __init__(self, trace_file, devices = None):
+    def __init__(self, trace_file, devices = None, *mac_to_ip):
         if len(str(trace_file)) > 20:
             self.file_name = str(trace_file)[-13:-5]
         else:
             self.file_name = trace_file
-        self.mac_to_ip = {}  #Aim is to map device to its IP addresses. A device may have multiple IPs but only one MAC
+
+        if mac_to_ip:
+            self.mac_to_ip = mac_to_ip[0]
+        else:
+            self.mac_to_ip = {}  #Aim is to map device to its IP addresses. A device may have multiple IPs but only one MAC
 
         if devices is not None:
             self.iot_devices = devices
@@ -184,3 +188,37 @@ class NetworkTrace:
                 else:
                     self.device_flows[packet_data['eth_dst']]['incoming'][flow_tuple] = []
                     self.device_flows[packet_data['eth_dst']]['incoming'][flow_tuple].append(packet_data)
+
+    def save_legend(self,handles, labels):
+        fig = plt.figure()
+        ax1 = fig.add_subplot(1, 1, 1)
+        ax1.legend(handles, labels)
+        ax1.xaxis.set_visible(False)
+        ax1.yaxis.set_visible(False)
+        for v in ax1.spines.values():
+            v.set_visible(False)
+        plt.savefig('device_signature_legend.png')
+
+    def device_signature_plots(self,device_objs):
+        import tools
+        ax = tools.get_ax()
+        ax.set_xlabel("Mean traffic volume (bytes)")
+        ax.set_ylabel("Standard deviation traffic volume (bytes)")
+        for device_obj in device_objs:
+            # if device_obj.device_name == "Dropcam":
+            if "Router" in device_obj.device_name:
+                continue
+            window_vectors = device_obj.create_traffic_volume_features()
+            x = []
+            y = []
+            for k in window_vectors:
+                x.append(window_vectors[k]['mean'])
+                y.append(window_vectors[k]['std'])
+            if len(x) > 1 and len(y) > 1:
+                ax.scatter(x, y, label=device_obj.device_name)
+        # plt.legend(loc='best')
+        plt.savefig('device_signature.png')
+        handles, labels = ax.get_legend_handles_labels()
+        self.save_legend(handles, labels)
+        # ax1.figure.savefig('device_signature_legend.jpeg ')
+        plt.show()

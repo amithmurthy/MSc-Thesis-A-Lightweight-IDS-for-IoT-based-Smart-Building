@@ -3,6 +3,8 @@ import networkx as nx
 import matplotlib.pyplot as plt
 from device import DeviceProfile
 import math
+import numpy as np
+from sklearn.cluster import DBSCAN
 
 """
 This class extracts the Packet Level Signature of remote control in IoT devices outlined in UC NDSS 2020 paper PINGPONG
@@ -14,6 +16,36 @@ class PacketLevelSignature():
         self.event_traffic = event_traffic
         self.process_events()
 
+    def cluster_event_traffic(self, command):
+        X = []
+        for location in self.event_traffic[command]:
+            for device_obj in self.event_traffic[command][location]:
+                for flow in device_obj.distance:
+                    X.extend(device_obj.distance[flow])
+        eps = 10
+        total_events = len(self.event_traffic[command])
+        minPts = total_events - (0.1 * total_events)
+        cluster = DBSCAN(eps=eps, min_samples=minPts, metric='precomputed').fit(X)
+
+        def plot_cluster():
+            core_samples_mask = np.zeros_like(cluster.labels_, dtype=bool)
+            core_samples_mask[cluster.core_sample_indices_] = True
+            labels = cluster.labels_
+            unique_labels = set(labels)
+            colors = [plt.cm.Spectral(each) for each in np.linspace(0, 1, len(unique_labels))]
+            for k, col in zip(unique_labels, colors):
+                if k == -1:
+                    # Black used for noise.
+                    col = [0, 0, 0, 1]
+                class_member_mask = (labels == k)
+                xy = X[class_member_mask & core_samples_mask]
+                plt.plot(xy[:, 0], xy[:, 1], 'o', markerfacecolor=tuple(col),
+                         markeredgecolor='k', markersize=14)
+                xy = X[class_member_mask & ~core_samples_mask]
+                plt.plot(xy[:, 0], xy[:, 1], 'o', markerfacecolor=tuple(col),
+                         markeredgecolor='k', markersize=6)
+            plt.savefig(command +" dbscanoutput.png")
+            plt.show()
 
     def process_events(self):
         for command in self.event_traffic:
@@ -28,8 +60,6 @@ class PacketLevelSignature():
         self.set_pkt_pairs(bidirectional_traffic, device_obj)
         self.set_pkt_sequences(device_obj)
         self.set_distance(device_obj)
-
-    # def cluster_event_traffic(self):
 
 
     def get_bidirectional_tcp_flows(self, device_obj):
@@ -182,11 +212,6 @@ class PacketLevelSignature():
                     else:
                         p1_len_2 = int(p2[1][2:])
                     device_obj.distance[flow].append(math.sqrt(math.pow(p1_len_1-p1_len_2,2) + math.pow(p2_len_1 - p1_len_2, 2)))
-
-        print(device_obj.distance)
-
-
-
 
 
 class GraphNetwork():

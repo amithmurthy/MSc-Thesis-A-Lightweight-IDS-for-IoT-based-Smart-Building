@@ -113,33 +113,22 @@ def model_device_behaviour(device_trafic_objects, dates,mal_flows, save_folder, 
         #     for i in range(0, len(out_mal_flow_sizes), 1):
         #         plot_flow_size(out_benign_flow_sizes[i], out_benign_flow_duration[i], out_mal_flow_sizes[i], out_mal_flow_duration[i], "output", file_name, i)
 
-def model_command_traffic(iot_objects, country, device):
-    # on = []
-    # off = []
-    # move =[]
-    # brightness = []
-    # power = []
-    # color = []
-    # watch = []
-    commands = ["on", "off", "move", "brightness", "power", "color", "watch", "recording"]
+
+def model_command_traffic(iot_objects, country, device, save_folder):
+
+    commands = ["on", "off", "move", "brightness", "power", "color", "watch", "recording", "photo", "set"]
+
     controllers = ["alexa", "google", "android", "local"]
     locations = ["lan", "wan"]
-    # for command_name in iot_objects:
-    #     if "on" in command_name:
-    #         on.append(command_name)
-    #     elif "off" in command_name:
-    #         off.append(command_name)
-    #     elif "color" in command_name:
-    #         color.append(command_name)
-    #     elif "power" in command_name:
-    #         power.append(command_name)
-    plots_folder = r"C:\Users\amith\Documents\Uni\Masters\Implementation\commands"
+
+    # plots_folder = r"C:\Users\amith\Documents\Uni\Masters\Implementation\commands"
+    plots_folder = save_folder
     folder = Path(plots_folder) / country / device
     save_folder = Path(folder)
 
-
-    attributes = ["input_size", "input_duration", "output_size", "output_duration", "input_jitter_sequence", "output_jitter_sequence", "input_jitter_avg", "input_no_of_pkts",
-                  "output_jitter_avg", "output_no_of_pkts", "input_flow_jitter_durations", "output_flow_jitter_durations"]
+    run_flow_jitter_comp = False
+    attributes = ["input_size","input_pkt_sizes","output_pkt_sizes", "input_duration", "output_size", "output_duration", "input_jitter_sequence", "output_jitter_sequence", "input_jitter_avg", "input_no_of_pkts",
+                  "output_jitter_avg", "output_no_of_pkts", "input_flow_jitter_durations", "output_flow_jitter_durations", "input_avg_ttl", "ttl_pkt_no"]
     # command_stats = {command: {"input_size":[], "input_duration":[], "output_pkt_sizes":[], "output_duration":[], "input_jitter":[], "output_jitter":[]} for command in iot_objects}
     command_stats = {command: {controller: {location: {attribute: [] for attribute in attributes} for location in locations} for controller in controllers} for command in commands}
     # command_stats = {command: {controller: None for controller in controllers} for command in commands}
@@ -169,85 +158,102 @@ def model_command_traffic(iot_objects, country, device):
 
             for device_obj in iot_objects[command_name]:
                 """A device_obj is the devices traffic from a command tracefile"""
-
                 device_obj.update_profile([], []) # Calculates the flow stats
 
                 bidirectional_inputs = [flow_tuple[0] for flow_tuple in device_obj.flow_pairs]
                 bidirectional_outputs = [flow_tuple [1] for flow_tuple in device_obj.flow_pairs]
                 iteration = 1
-                for in_flow, out_flow in zip(bidirectional_inputs, bidirectional_outputs):
-                    in_pkts, in_jitter = device_obj.get_flow_jitter(device_obj.flows["incoming"][in_flow])
-                    out_pkts, out_jitter = device_obj.get_flow_jitter(device_obj.flows["outgoing"][out_flow])
-                    save_folder = Path(folder) / command
-                    device_obj.compare_command_flow_direction_jitter(in_pkts, in_jitter, out_pkts, out_jitter, str(save_folder), iteration, location)
-                    iteration += 1
+                if run_flow_jitter_comp is True:
+                    for in_flow, out_flow in zip(bidirectional_inputs, bidirectional_outputs):
+                        in_pkts, in_jitter = device_obj.get_flow_jitter(device_obj.flows["incoming"][in_flow])
+                        out_pkts, out_jitter = device_obj.get_flow_jitter(device_obj.flows["outgoing"][out_flow])
+                        save_folder = Path(folder) / command
+                        device_obj.compare_command_flow_direction_jitter(in_pkts, in_jitter, out_pkts, out_jitter, str(save_folder), iteration, location)
+                        iteration += 1
                 input_stats = get_command_input_stats(device_obj, bidirectional_inputs)
                 output_stats = get_command_output_stats(device_obj, bidirectional_outputs)
                 input_jitter_stats = get_jitter(device_obj, "incoming")
                 output_jitter_stats = get_jitter(device_obj, "outgoing")
+                avg_ttl, ttl_pkt_no = get_avg_ttl(device_obj)
                 try:
                     command_stats[command][controller][location]['input_jitter_sequence'].extend(input_jitter_stats['jitter_sequence'])
                     command_stats[command][controller][location]['output_jitter_sequence'].extend(output_jitter_stats['jitter_sequence'])
                     command_stats[command][controller][location]['input_jitter_avg'].extend(input_jitter_stats['flow_avg_jitter'])
                     command_stats[command][controller][location]['output_jitter_avg'].extend(output_jitter_stats['flow_avg_jitter'])
-                    command_stats[command][controller][location]['input_no_of_pkts'].extend(input_jitter_stats['flow_avg_jitter'])
-                    command_stats[command][controller][location]['output_no_of_pkts'].extend(output_jitter_stats['flow_avg_jitter'])
+                    command_stats[command][controller][location]['input_no_of_pkts'].extend(input_jitter_stats['flow_pkt_no'])
+                    command_stats[command][controller][location]['output_no_of_pkts'].extend(output_jitter_stats['flow_pkt_no'])
                     command_stats[command][controller][location]['input_flow_jitter_durations'].extend(input_jitter_stats['flow_durations'])
                     command_stats[command][controller][location]['output_flow_jitter_durations'].extend(output_jitter_stats['flow_durations'])
                     command_stats[command][controller][location]['input_size'].extend(input_stats['flow_sizes'])
                     command_stats[command][controller][location]['output_size'].extend(output_stats['flow_sizes'])
                     command_stats[command][controller][location]['input_duration'].extend(input_stats['flow_duration'])
                     command_stats[command][controller][location]['output_duration'].extend(output_stats['flow_duration'])
-                except KeyError:
-                    print("key error cont", controller)
+                    command_stats[command][controller][location]['input_pkt_sizes'].extend(get_input_pkt_sizes(device_obj))
+                    command_stats[command][controller][location]['output_pkt_sizes'].extend(get_output_pkt_sizes(device_obj))
+                    command_stats[command][controller][location]['input_avg_ttl'].extend(avg_ttl)
+                    command_stats[command][controller][location]['ttl_pkt_no'].extend(ttl_pkt_no)
+                except KeyError as e:
+                    print("key error controller", controller)
                     print("key error command", command)
-
+                    print(e)
 
     # save_folder = str(save_folder)
-    plot_command_location_jitter(command_stats, command="on", controller = "android", plot_type="pkt_no", save_folder=save_folder)
-    plot_command_location_jitter(command_stats, command="off", controller="android",plot_type="pkt_no" ,save_folder=save_folder)
-    plot_command_location_jitter(command_stats, command="on", controller="android", plot_type="flow_duration",
-                                 save_folder=save_folder)
-    plot_command_location_jitter(command_stats, command="off", controller="android", plot_type="flow_duration",
-                                 save_folder=save_folder)
 
-    # plot_command_flows(command_stats, commands=[], name="on", file=save_folder)
-    # plot_command_flows(command_stats, commands=off, name="off", file=save_folder)
-    # plot_command_flows(command_stats, commands=power, name="power", file=save_folder)
-    # plot_command_jitter_cdf(command_stats, save_folder)
-    # plot_command_pkt_size_cdf(command_stats, save_folder)
-    # pkt_size_cdf(command_stats["alexa_on"]['input_jitter'], command_stats['alexa_on']['output_jitter'], save_folder)
-    # if len(color) > 0:
-    #     plot_command_flows(command_stats, commands=color, name="color", file=save_folder)
+    # plot_command_flows(command_stats, command='on', file=save_folder)
+    # plot_command_flows(command_stats, command='off', file=save_folder)
 
 
-def plot_command_jitter_cdf(command_stats, save_folder):
+    def plot_graphs():
+        for command in command_stats:
+            if len(command_stats[command]['android']['lan']) > 0 or len(command_stats[command]['android']['wan']) > 0:
+                # compare_command_location_ttl(command_stats, command, save_folder)
+                # compare_command_location_ttl(command_stats, 'off', save_folder)
+                # plot_command_location_jitter(command_stats, command=command, controller = "android", plot_type="pkt_no", save_folder=save_folder)
+            # plot_command_location_jitter(command_stats, command="off", controller="android",plot_type="pkt_no" ,save_folder=save_folder)
+                # plot_command_location_jitter(command_stats, command=command, controller="android", plot_type="flow_duration",
+            #                              save_folder=save_folder)
+            # plot_command_location_jitter(command_stats, command="off", controller="android", plot_type="flow_duration",
+            #                              save_folder=save_folder)
+
+                plot_command_flows(command_stats, command=command, file=save_folder)
+            # plot_command_flows(command_stats, command='off', file=save_folder)
+        # plot_command_flows(command_stats, commands=power, name="power", file=save_folder)
+                plot_command_jitter_cdf(command_stats, command,save_folder)
+                plot_command_pkt_size_cdf(command_stats,command ,save_folder)
+
+        compare_command_inputs(command_stats, save_folder)
+            # pkt_size_cdf(command_stats, 'on', save_folder)
+        # pkt_size_cdf(command_stats["alexa_on"]['input_jitter'], command_stats['alexa_on']['output_jitter'], save_folder)
+
+    plot_graphs()
+
+def plot_command_jitter_cdf(command_stats, command,save_folder):
     """Compares the jitter of remote and local commands"""
     ax = get_ax()
-    for command in command_stats:
-        if "on" in command and "alexa" not in command and "google" not in command:
-            command_jitter_values = sorted(command_stats[command]['input_jitter'])
-            command_jitter_cdf = np.arange(1, len(command_jitter_values) + 1) / len(command_jitter_values)
-            label = None
-            if "local" in command:
-                label = "local"
-            elif "lan" in command:
-                label = "lan"
-            elif "wan" in command:
-                label = "wan"
-            ax.plot(command_jitter_values, command_jitter_cdf, label=label)
-        # command_response_jitter = sorted(command_stats[command]['output_jitter'])
+    locations = ['lan', 'wan']
+    for location in locations:
+        # if "on" in command and "alexa" not in command and "google" not in command:
+        command_jitter_values = sorted(command_stats[command]['android'][location]['input_jitter_sequence'])
+        command_jitter_cdf = np.arange(1, len(command_jitter_values) + 1) / len(command_jitter_values)
+        label = None
+        if "lan" in location:
+            label = "lan"
+        elif "wan" in location:
+            label = "wan"
+        ax.plot(command_jitter_values, command_jitter_cdf, label=label)
+    # command_response_jitter = sorted(command_stats[command]['output_jitter'])
 
         # command_response_cdf = np.arange(1, len(command_response_jitter) + 1) / len(command_response_jitter)
 
     ax.set_xlabel("jitter (ms)")
     ax.set_ylabel("CDF")
+    ax.set_title(command + ' input traffic jitter')
     # ax.plot(command_jitter_values, command_jitter_cdf, label='command jitter')
     # ax.plot(command_response_jitter, command_response_cdf, label='response jitter')
     plt.legend(loc='best')
-    plt.savefig(save_folder+"/on/jittercdf.png")
+    save_file = Path(save_folder) / command
+    plt.savefig(str(save_file) +"jittercdf.png")
     plt.show()
-
 
 def get_jitter(device_obj, direction):
     # flow_jitter = {flow: [] for flow in device_obj.flows[direction]}
@@ -257,6 +263,7 @@ def get_jitter(device_obj, direction):
         'flow_pkt_no': [], #number of packets in each flow
         'flow_durations': []
     }
+
     for flow in device_obj.flows[direction]:
         # flow_jitter[flow] = []
         flow_jitter = []
@@ -277,6 +284,7 @@ def get_jitter(device_obj, direction):
             jitter_info['flow_avg_jitter'].append(average(flow_jitter))
             jitter_info['flow_pkt_no'].append(len(flow_traffic))
             jitter_info['flow_durations'].append(flow_traffic[-1]['relative_timestamp'] - flow_traffic[0]['relative_timestamp'])
+
         # ax = get_ax()
         # ax.plot(pkt_no, flow_jitter)
         # ax.set_xlabel('pkt number')
@@ -291,48 +299,77 @@ def get_jitter(device_obj, direction):
 
     return jitter_info
 
-def plot_command_flows(command_stats, commands, name, file):
-
+def plot_command_flows(command_stats, command, file):
+    """Plots command flow duration and size according to the direction of the command flow (input and output)"""
     fig = plt.figure()
     ax = fig.add_subplot(1,1,1)
-    n = 10
-    color = iter(cm.rainbow(np.linspace(0,1,n)))
-    for command in commands:
-        c = next(color)
-        ax.scatter(command_stats[command]['input_duration'], command_stats[command]['input_size'], label=str(command)+" input flows", color=np.random.rand(3))
-        ax.scatter(command_stats[command]['output_duration'], command_stats[command]['output_size'],label=str(command) + " output flows", color=np.random.rand(3))
+    ax.scatter(command_stats[command]['android']['lan']['input_duration'], command_stats[command]['android']['lan']['input_size'],
+               label="lan input flow", color='b')
+    ax.scatter(command_stats[command]['android']['lan']['output_duration'], command_stats[command]['android']['lan']['output_size'],
+               label= "lan output flow", color='g')
+    ax.scatter(command_stats[command]['android']['wan']['input_duration'], command_stats[command]['android']['wan']['input_size'],
+               label="wan input flow", color='r')
+    ax.scatter(command_stats[command]['android']['wan']['output_duration'], command_stats[command]['android']['wan']['output_size'],
+               label= "wan output flow", color='y')
     ax.set_ylabel("Flow size (bytes)")
     ax.set_xlabel("Flow duration (seconds)")
-    file = Path(file) / name
+    ax.set_title(command + ' command flow characteristics')
+    file = Path(file) / command
     file = str(file) + "flowsize.png"
     plt.legend(loc='best')
     plt.savefig(file)
     plt.show()
 
 
-def plot_command_pkt_size_cdf(command_stats, save_folder):
-    ax = get_ax()
-    for command in command_stats:
-        if "on" in command and "alexa" not in command and "google" not in command:
-            pkt_sizes = sorted(command_stats[command]["input_sizes"])
-            pkt_sizes_cdf = np.arange(1, len(pkt_sizes) + 1) / len(pkt_sizes)
-            label = None
-            if "local" in command:
-                label = "local"
-            elif "lan" in command:
-                label = "lan"
-            elif "wan" in command:
-                label = "wan"
-            ax.plot(pkt_sizes, pkt_sizes_cdf, label=label)
+def get_avg_ttl(device_obj):
+    avg_ttl = []
+    no_of_pkts = []
+    for flow in device_obj.flows["incoming"]:
+        ttl_values = []
+        if len(device_obj.flows['incoming'][flow]) > 1:
+            for pkt in device_obj.flows["incoming"][flow]:
+                ttl_values.append(pkt['ttl'])
+            avg_ttl.append(average(ttl_values))
+            no_of_pkts.append(len(device_obj.flows['incoming'][flow]))
 
-    ax.set_xlabel("jitter (ms)")
+    return avg_ttl, no_of_pkts
+
+def compare_command_location_ttl(command_stats, command,save_folder):
+    ax = get_ax()
+    ax.scatter(command_stats[command]['android']['lan']['ttl_pkt_no'],
+            command_stats[command]['android']['lan']['input_avg_ttl'], label='lan input flow')
+    ax.scatter(command_stats[command]['android']['wan']['ttl_pkt_no'],
+            command_stats[command]['android']['wan']['input_avg_ttl'], label='wan input flow')
+    ax.set_ylabel('TTL')
+    ax.set_xlabel('Number of packets')
+    ax.set_title("Comparison of command location TTL values (input)")
+    file = save_folder / command
+    save_file = str(file) + "compare_command_location_ttl.png"
+    plt.legend(loc='best')
+    plt.savefig(save_file)
+
+def plot_command_pkt_size_cdf(command_stats, command, save_folder):
+    ax = get_ax()
+    locations = ['lan', 'wan']
+    for location in locations:
+        pkt_sizes = sorted(command_stats[command]['android'][location]["input_pkt_sizes"])
+        pkt_sizes_cdf = np.arange(1, len(pkt_sizes) + 1) / len(pkt_sizes)
+        label = None
+        if "lan" in location:
+            label = "lan"
+        elif "wan" in location:
+            label = "wan"
+        ax.plot(pkt_sizes, pkt_sizes_cdf, label=label + ' input packets')
+
+    ax.set_xlabel("Packet size (bytes)")
     ax.set_ylabel("CDF")
+    ax.set_title(command + " packet size cdf")
     # ax.plot(command_jitter_values, command_jitter_cdf, label='command jitter')
     # ax.plot(command_response_jitter, command_response_cdf, label='response jitter')
     plt.legend(loc='best')
-    plt.savefig(save_folder + "/on/pktsizecdf.png")
+    save_file = Path(save_folder) / command
+    plt.savefig(str(save_file) + "pktsizecdf.png")
     plt.show()
-
 
 def get_avg_input_stats(device_obj, mal_flows):
     # rates = []
@@ -364,9 +401,8 @@ def get_avg_input_stats(device_obj, mal_flows):
             flows += 1
             # print("in flow size over zero:", device_obj.input_flow_stats[flow]['size'])
             # print("flow id", flow)
-    # print(flows)
-    # print(len(device_obj.input_flow_stats.keys()))
-    # print(size)
+
+
     return {
         # "avg_rate": rate/flows,
         # "pkt_rate": pkt_rate / flows,
@@ -459,6 +495,7 @@ def get_command_input_stats(device_obj, flow_pairs):
             # rate += device_obj.input_flow_stats[flow]['byte rate']
             flow_sizes.append(device_obj.input_flow_stats[flow]['size'])
             flow_duration.append(device_obj.input_flow_stats[flow]['duration'])
+
 
     return {
         "flows": no_of_flows,
@@ -575,6 +612,8 @@ def plot_input_flow_graph(time,input, file_name):
     plt.savefig(file_name)
 
 def plot_flow_size(benign_size, benign_duration, mal_size, mal_duration, direction, file_name, i):
+    """ Plots scatter graph of flows according to flow size and duration"""
+
     fig = plt.figure()
     ax = fig.add_subplot(1, 1, 1)
     if direction == "input":
@@ -619,4 +658,18 @@ def plot_command_location_jitter(command_stats, command, controller, plot_type, 
     plt.savefig(str(save_path) +"androidlocation"+ plot_type +"jitterduration.png")
     plt.show()
     print(command, controller,"location jitter plotted")
+
+def compare_command_inputs(command_stats, save_folder):
+    ax = get_ax()
+    ax.set_ylabel("Flow size (bytes)")
+    ax.set_xlabel("Flow duration (seconds)")
+    ax.set_title("Command type flow characteristics")
+    for command in command_stats:
+        if len(command_stats[command]['android']['lan']) > 0 or len(command_stats[command]['android']['wan']) > 0:
+            for location in command_stats[command]['android']:
+                label = command+' '+location+ " flow"
+                ax.scatter(command_stats[command]['android'][location]['input_duration'], command_stats[command]['android'][location]['input_size'], label=label)
+    plt.legend(loc='best')
+    plt.savefig(str(save_folder)+"commandinputflows.png")
+    print('compare command inputs plotted')
 
