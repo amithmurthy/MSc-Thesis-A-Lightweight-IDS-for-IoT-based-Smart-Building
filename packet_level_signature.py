@@ -12,8 +12,12 @@ This class extracts the Packet Level Signature of remote control in IoT devices 
 
 class PacketLevelSignature():
 
-    def __init__(self, event_traffic):
-        self.event_traffic = event_traffic
+    def __init__(self, event_traffic, traffic_type, *device_obj):
+        if traffic_type == 'command':
+            self.event_traffic = event_traffic
+        else:
+            self.device_obj = device_obj[0]
+        self.traffic_type = traffic_type
         self.process_events()
 
     def cluster_event_traffic(self, command):
@@ -48,10 +52,13 @@ class PacketLevelSignature():
             plt.show()
 
     def process_events(self):
-        for command in self.event_traffic:
-            for location in self.event_traffic[command]:
-                for device_obj in self.event_traffic[command][location]:
-                    self.preprocess_device_traffic(device_obj)
+        if self.traffic_type == 'command':
+            for command in self.event_traffic:
+                for location in self.event_traffic[command]:
+                    for device_obj in self.event_traffic[command][location]:
+                        self.preprocess_device_traffic(device_obj)
+        else:
+            self.preprocess_device_traffic(self.device_obj)
 
 
     def preprocess_device_traffic(self, device_obj):
@@ -61,14 +68,12 @@ class PacketLevelSignature():
         self.set_pkt_sequences(device_obj)
         self.set_distance(device_obj)
 
-
     def get_bidirectional_tcp_flows(self, device_obj):
         tcp_flows = []
         device_obj.set_flow_pairs()
         for flow_tuple in device_obj.flow_pairs:
             if flow_tuple[0][4] == "TCP" and flow_tuple[1][4] == "TCP":
                 tcp_flows.append(flow_tuple)
-
         return tcp_flows
 
     def order_pkts_in_bidirectional_flow(self, tcp_flows, device_obj):
@@ -190,16 +195,26 @@ class PacketLevelSignature():
             return pkt_pair[1][0:2]
 
     def set_distance(self, device_obj):
+        """TODO: set distance for matched pkt pairs - for now it extracts matched pkt_pairs in pkt_sequences"""
         DOUBLE_MAX = 1.7976931348623158E+308
         device_obj.distance = {connection:[] for connection in device_obj.pkt_sequences}
+        matched_pairs = {}
+        matched_sequences = {}
         for flow in device_obj.pkt_sequences:
             sequence = device_obj.pkt_sequences[flow]
             for pkt_seq in sequence:
                 p1 = pkt_seq[0]
                 p2 = pkt_seq[1]
-                print(p1, p2)
                 if self.first_pkt_direction(p1) != self.first_pkt_direction(p2) or self.second_pkt_direction(p1) != self.second_pkt_direction(p2):
-                    device_obj.distance[flow].append(DOUBLE_MAX)
+                    # device_obj.distance[flow].append(DOUBLE_MAX)
+                    if p1 in matched_pairs:
+                        matched_pairs[p1] += 1
+                    else:
+                        matched_pairs[p1] = 1
+                    if p2 in matched_pairs:
+                        matched_pairs[p1] += 1
+                    else:
+                        matched_pairs[p2] = 1
                 else:
                     p1_len_1 = int(p1[0][2:])
                     if p1[1] == 0:
@@ -212,6 +227,7 @@ class PacketLevelSignature():
                     else:
                         p1_len_2 = int(p2[1][2:])
                     device_obj.distance[flow].append(math.sqrt(math.pow(p1_len_1-p1_len_2,2) + math.pow(p2_len_1 - p1_len_2, 2)))
+
 
 
 class GraphNetwork():

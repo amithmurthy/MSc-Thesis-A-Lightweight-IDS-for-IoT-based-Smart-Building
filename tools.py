@@ -26,6 +26,8 @@ def save_traffic(NetworkTraffic, file_path,devices):
 
     trace_filtering.shelve_network_info(NetworkTraffic, path+'\_network_info')
     for device in devices:
+        if "Router" in device.device_name:
+            continue
         trace_filtering.shelve_device_traffic(device, path+'\_' +device.device_name + "-db")
 
 
@@ -62,41 +64,52 @@ def unpickle_device_objects(file_path, device_filter, dataset_type):
         return device_objects, network_objects, files
 
 
-def unpickle_network_trace_and_device_obj(file_path, *limit):
-    network_trace_devices = {}
+
+def unpickle_network_trace_and_device_obj(file_path, **kwargs):
+    print("loading files")
+    network_trace_devices = {} #{NetworkTrace:[DeviceProfile, DeviceProfile...]}
     database = Path(file_path)
+    # Count will limit the number of network_traces unpickled
     count = 0
-    limit = limit[0] if limit else 6
+    file_filter = kwargs['files'] if 'files' in kwargs.keys() else None
+    print("file_filter", file_filter)
+    device_filter = kwargs['devices'] if 'devices' in kwargs.keys() else None
+    limit = kwargs['limit'] if 'limit' in kwargs.keys() else math.inf
+    extract_timestamp_dict = kwargs['extract_timestamp'] if 'extract_timestamp' in kwargs.keys() else False
     for network_trace in database.iterdir():
         count += 1
         if count > limit:
             break
+        if file_filter is not None:
+            if str(network_trace)[-9:] not in file_filter or str(network_trace)[-9:] != file_filter:
+                continue
         network_trace_file_path = file_path + '\_' + str(network_trace)[-8:]
+        print("Unpickling", network_trace)
         network_obj = open_network_archive(network_trace_file_path + "/_network_info",
-                                           str(network_trace)[-8:] + ".pcap")
+                                           str(network_trace)[-8:] + ".pcap", extract_timestamp_dict)
         network_trace_devices[network_obj] = []
-        print(network_trace)
         for device_folder in network_trace.iterdir():
             file_name = re.search('_(.+?)-db', device_folder.name)
             if file_name:
                 device_name = file_name.group(1)
                 if "Router" in device_name:
                     continue
-                print(device_name)
+                if device_name not in device_filter:
+                    continue
                 device_obj = open_device_archive(network_trace_file_path + '\_' + device_name + '-db')
                 network_trace_devices[network_obj].append(device_obj)
-
     return network_trace_devices
 
 
 
-
-
-def open_network_archive(directory, file_name):
+def open_network_archive(directory, file_name, extract_timestamp_dict):
     d = kl.archives.dir_archive(name=directory, serialized= True)
     d.load('mac_to_ip')
+    if extract_timestamp_dict is True:
+        d.load('ordinal_timestamp')
     from network import NetworkTrace
-    return NetworkTrace(file_name, None, d['mac_to_ip'])
+    return NetworkTrace(file_name, None,d['mac_to_ip'])
+
 def open_device_archive(directory):
     # print(directory)
     d = kl.archives.dir_archive(name=directory, serialized = True)
@@ -119,6 +132,10 @@ def get_malicious_flows(folder_path):
     malicious_flows = {}
     for file in folder.iterdir():
         if "packet" in file.name:
+            device_mac_int = str(file.name)[:12]
+            # Need to convert the string so its stored in the right format
+            device = ":".join(device_mac_int[i:i + 2] for i in range(0, len(device_mac_int), 2))
+            malicious_flows[device] = {}
             with open(file, 'r') as txtfile:
                 # mylist = [line.rstrip('\n') for line in txtfile]
                 # line = txtfile.readline()
@@ -131,12 +148,13 @@ def get_malicious_flows(folder_path):
                     elif elements[6] == '17':
                         proto = "UDP"
                     date = time.strftime('%Y-%m-%d', time.localtime(int(elements[0])/1000))
-                    if date in malicious_flows:
-                        malicious_flows[date].append((elements[4], elements[5], int(elements[7]), int(elements[8]), proto))
+                    if date in malicious_flows[device]:
+                        malicious_flows[device][date].append((elements[4], elements[5], int(elements[7]), int(elements[8]), proto))
                     else:
-                        malicious_flows[date] = []
-                        malicious_flows[date].append((elements[4], elements[5], int(elements[7]), int(elements[8]), proto))
+                        malicious_flows[device][date] = []
+                        malicious_flows[device][date].append((elements[4], elements[5], int(elements[7]), int(elements[8]), proto))
     return malicious_flows
+
 
 def get_ax():
     fig = plt.figure()

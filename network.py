@@ -1,12 +1,14 @@
 from collections import OrderedDict
 import matplotlib.pyplot as plt
+import matplotlib.cm as cm
 import numpy as np
 from datetime import datetime, date
 import logging
+from pathlib import Path
 
 
 class NetworkTrace:
-    def __init__(self, trace_file, devices = None, *mac_to_ip):
+    def __init__(self, trace_file, devices = None,*mac_to_ip, **kwargs):
         if len(str(trace_file)) > 20:
             self.file_name = str(trace_file)[-13:-5]
         else:
@@ -43,8 +45,8 @@ class NetworkTrace:
                        "PIX-STAR Photo-frame":"e0:76:d0:33:bb:85",
                        "HP Printer":"70:5a:0f:e4:9b:c0",
                        "Samsung Galaxy Tab":"08:21:ef:3b:fc:e3",
-                       "Nest Dropcam":"30:8c:fb:b6:ea:45",
-                       "TPLink Router Bridge LAN (Gateway)":"14:cc:20:51:33:ea"}
+                       "Nest Dropcam":"30:8c:fb:b6:ea:45"
+                       }
 
         #"tplink-plug": "50:c7:bf:b1:d2:78"
         self.iot_mac_addr = self.iot_devices.values()
@@ -55,6 +57,7 @@ class NetworkTrace:
             "Android Phone": "b4:ce:f6:a7:a3:c2",
             "IPhone": "d0:a6:37:df:a1:e1",
             "MacBook/Iphone": "f4:5c:89:93:cc:85",
+            "TPLink Router Bridge LAN (Gateway)": "14:cc:20:51:33:ea"
         }
         self.keys_list = []
         for i in self.iot_devices:
@@ -66,8 +69,10 @@ class NetworkTrace:
         self.local_device_traffic = {i: [] for i in self.non_iot_addr}
         self.internet_traffic = {}
         # self.flow_table = {}
+        self.save_folder = r"C:\Users\amith\Documents\Uni\Masters\Graphs\device_signature"
         self.device_flows = {addr: {'incoming': OrderedDict(), 'outgoing': OrderedDict()} for addr in self.keys_list}
         self.device_flow_stats = {addr: {'incoming': {}, 'outgoing': {}} for addr in self.keys_list}
+        self.ordinal_timestamp = kwargs['ordinal_timestamp'] if 'ordinal_timestamp' in kwargs.keys() else None
         # logging.basicConfig(filename=self.file_name[0:-5]+"log", level=logging.DEBUG)
 
     def flow_stats(self, device):
@@ -189,7 +194,7 @@ class NetworkTrace:
                     self.device_flows[packet_data['eth_dst']]['incoming'][flow_tuple] = []
                     self.device_flows[packet_data['eth_dst']]['incoming'][flow_tuple].append(packet_data)
 
-    def save_legend(self,handles, labels):
+    def save_legend(self,handles, labels, name):
         fig = plt.figure()
         ax1 = fig.add_subplot(1, 1, 1)
         ax1.legend(handles, labels)
@@ -197,28 +202,98 @@ class NetworkTrace:
         ax1.yaxis.set_visible(False)
         for v in ax1.spines.values():
             v.set_visible(False)
-        plt.savefig('device_signature_legend.png')
+        plt.savefig(self.file_name+ name)
 
     def device_signature_plots(self,device_objs):
         import tools
         ax = tools.get_ax()
         ax.set_xlabel("Mean traffic volume (bytes)")
         ax.set_ylabel("Standard deviation traffic volume (bytes)")
+        used_colors = []
+        def get_unique_colour():
+            c = np.random.rand(3,)
+            if np.any(used_colors == c):
+                c = get_unique_colour()
+            else:
+                used_colors.append(c)
+                return c
+
         for device_obj in device_objs:
             # if device_obj.device_name == "Dropcam":
             if "Router" in device_obj.device_name:
                 continue
-            window_vectors = device_obj.create_traffic_volume_features()
+            window_vectors = device_obj.create_traffic_volume_features("bidirectional")
             x = []
             y = []
             for k in window_vectors:
                 x.append(window_vectors[k]['mean'])
                 y.append(window_vectors[k]['std'])
             if len(x) > 1 and len(y) > 1:
-                ax.scatter(x, y, label=device_obj.device_name)
+                col = get_unique_colour()
+                ax.scatter(x, y, label=device_obj.device_name, color=col)
         # plt.legend(loc='best')
-        plt.savefig('device_signature.png')
+        save_path = Path(self.save_folder) / str(self.file_name+'device_signature.png')
+        plt.savefig(str(save_path))
         handles, labels = ax.get_legend_handles_labels()
-        self.save_legend(handles, labels)
+        self.save_legend(handles, labels, "device_signature.png")
         # ax1.figure.savefig('device_signature_legend.jpeg ')
+        plt.show()
+
+    def change_device_timestamp(self, device_objs):
+        print("changing timestamp")
+        count = 0
+        for device in device_objs:
+            print(device.device_name)
+            for direction in device.flows:
+                for flow in device.flows[direction]:
+                    for pkt in device.flows[direction][flow]:
+                        count += 1
+                        # print("changed timestamp from {0} to {1}".format(pkt['relative_timestamp'], self.ordinal_timestamp[pkt['ordinal']]))
+                        pkt['relative_timestamp'] = self.ordinal_timestamp[pkt['ordinal']]
+        print('---------------')
+        print("processed file {0}, number of packets {1}".format(self.file_name, count))
+        print('---------------')
+
+
+    def device_flow_direction_signature(self, device_objs):
+        import tools
+        ax = tools.get_ax()
+        plot_name = 'input_flow_device_signature.png'
+        ax.set_xlabel("Mean traffic volume (bytes)")
+        ax.set_ylabel("Standard deviation traffic volume (bytes)")
+        ax.set_title("Device flow direction rate signature")
+        filter_out = ["PIX-STAR Photo-frame", "iHome"]
+        color = iter(cm.rainbow(np.linspace(0, 1, len(device_objs) * 2)))
+        used_colors = []
+
+        def get_unique_colour():
+            c = np.random.rand(3,)
+            if np.any(used_colors == c):
+                c = get_unique_colour()
+            else:
+                used_colors.append(c)
+                return c
+
+        for device_obj in device_objs:
+            input_vectors = device_obj.create_traffic_volume_features("input")
+            output_vectors = device_obj.create_traffic_volume_features("output")
+            input_x, input_y = [],[]
+            output_x, output_y = [],[]
+            for t in input_vectors:
+                input_x.append(input_vectors[t]['mean'])
+                input_y.append(input_vectors[t]['std'])
+            for time in output_vectors:
+                output_x.append(output_vectors[time]['mean'])
+                output_y.append(output_vectors[time]['std'])
+            if len(input_x) > 0 and len(input_y) > 0:
+                col = get_unique_colour()
+                ax.scatter(input_x, input_y, label=device_obj.device_name + ' inputs', color=col)
+            # if len(output_x) > 0 and len(output_y) > 0:
+            #     col = get_unique_colour()
+            #     ax.scatter(output_x, output_y, label=device_obj.device_name + ' ouputs', color=col)
+
+        save_path = Path(self.save_folder) / str(self.file_name + plot_name)
+        plt.savefig(str(save_path))
+        handles, labels = ax.get_legend_handles_labels()
+        self.save_legend(handles, labels, plot_name)
         plt.show()

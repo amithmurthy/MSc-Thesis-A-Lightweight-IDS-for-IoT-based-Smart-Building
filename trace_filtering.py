@@ -45,7 +45,9 @@ def analyse_pcap(NetworkTraffic, file, **kwargs):
         ttl_filter = True
     else:
         ttl_filter = False
-
+    if 'epoch_filter' in kwargs.keys():
+        epoch_filter = True
+        NetworkTraffic.ordinal_timestamp = {}
 
     count = 0
     # non_ip_packets = []
@@ -67,6 +69,9 @@ def analyse_pcap(NetworkTraffic, file, **kwargs):
             else:
                 packet_data['relative_timestamp'] = get_timestamp(pkt_metadata, count, first_pkt_time)
 
+            if epoch_filter is True:
+                NetworkTraffic.ordinal_timestamp[count] = packet_data['relative_timestamp']
+                continue
             if 'type' not in ether_pkt.fields:
                 # Logic Link Control (LLC) frames will have 'len' instead of 'type'.
                 # We disregard those
@@ -74,6 +79,7 @@ def analyse_pcap(NetworkTraffic, file, **kwargs):
             if ARP in ether_pkt:
                 continue
             ipv = None
+
 
             if IP or IPv6 in ether_pkt:
                 if IPv6 in ether_pkt:
@@ -93,7 +99,6 @@ def analyse_pcap(NetworkTraffic, file, **kwargs):
             #     non_ip_packets.append(ether_pkt)
             else:
                 continue
-
 
             if ipv is not None:
                 if ether_pkt.src not in list(NetworkTraffic.mac_to_ip.keys()):
@@ -378,52 +383,47 @@ def shelve_network_info(NetworkTraffic, file_name):
         pass
     # ar['local_traffic'] = NetworkTraffic.local_device_traffic
 
-def shelve_device_traffic(device_object, file_out):
-
-    # pickle_list = [('file', NetworkTraffic.file_name), ('mac_to_ip', NetworkTraffic.mac_to_ip), ('network_device_flows', NetworkTraffic.device_flows),
-    # ('internet_traffic', NetworkTraffic.internet_traffic), ('local_traffic', NetworkTraffic.local_device_traffic), ('flow_table', NetworkTraffic.flow_table)]
-    #
-    # with shelve.open(file_out, 'c') as shelf:
-    #     # pickle.dump(NetworkTraffic, pickle_fd, protocol=pickle.HIGHEST_PROTOCOL)
-    #     for item in pickle_list:
-    #         shelf[item[0]] = item[1]
-
+def shelve_device_traffic(device_object, file_out, *save_option):
     ar = kl.archives.dir_archive(name=file_out, serialized=True, cached=True,protocol=4)
-
-    # add device flows to memory cache
-    try:
+    if save_option:
         ar['device_traffic'] = device_object.flows
-        # dump from memory
         ar.dump()
-        # clear cache
         ar.clear()
-        ar['device_name'] = device_object.device_name
-        ar['mac_addr'] = device_object.mac_address
-        ar['ip_addrs'] = device_object.ip_addrs
-        ar.dump()
-    except MemoryError:
-        #dictionary is too large; half the dict and pickle separately
-        if device_object.device_name == "TPLink Router Bridge LAN (Gateway)":
-            pass
-        print(device_object.device_name + " dict too large")
-        def modularise(rec_dict=None, iteration=0):
+    else:
+        # add device flows to memory cache
+        try:
+            ar['device_traffic'] = device_object.flows
+            # dump from memory
+            ar.dump()
+            # clear cache
+            ar.clear()
+            ar['device_name'] = device_object.device_name
+            ar['mac_addr'] = device_object.mac_address
+            ar['ip_addrs'] = device_object.ip_addrs
+            ar.dump()
+        except MemoryError:
+            #dictionary is too large; half the dict and pickle separately
+            if device_object.device_name == "TPLink Router Bridge LAN (Gateway)":
+                pass
+            print(device_object.device_name + " dict too large")
+            def modularise(rec_dict=None, iteration=0):
 
-            if rec_dict is None:
-                dict1, dict2 = halve_dict(device_object.flows)
-            else:
-                dict1, dict2 = halve_dict(rec_dict)
-            try:
-                ar['device_traffic_1'] = dict1
-                ar.dump()
-                ar.clear()
-                ar['device_traffic_2'] = dict2
-                ar.dump()
-                ar.clear()
-            except MemoryError:
-                # print("iteration:", iteration)
-                print(device_object.device_name + " dictionaries still too big - being modularised")
-                modularise(dict1, iteration)
-                modularise(dict2, iteration)
+                if rec_dict is None:
+                    dict1, dict2 = halve_dict(device_object.flows)
+                else:
+                    dict1, dict2 = halve_dict(rec_dict)
+                try:
+                    ar['device_traffic_1'] = dict1
+                    ar.dump()
+                    ar.clear()
+                    ar['device_traffic_2'] = dict2
+                    ar.dump()
+                    ar.clear()
+                except MemoryError:
+                    # print("iteration:", iteration)
+                    print(device_object.device_name + " dictionaries still too big - being modularised")
+                    modularise(dict1, iteration)
+                    modularise(dict2, iteration)
 
 def check_flows(NetworkTraffic):
     for value in NetworkTraffic.iot_devices.values():

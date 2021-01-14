@@ -4,12 +4,13 @@ from matplotlib.pyplot import cm
 from scipy.interpolate import make_interp_spline, BSpline
 import numpy as np
 import statistics
+import inspect
 from sklearn.cluster import DBSCAN
 
 
 class DeviceProfile:
 
-    def __init__(self, device_name, mac_address, ip_addrs, traffic):
+    def __init__(self, device_name, mac_address, ip_addrs, traffic, ):
         self.device_name = device_name
         self.mac_address = mac_address
         self.ip_addrs = ip_addrs
@@ -33,12 +34,15 @@ class DeviceProfile:
         self.internet_input_flows = []
         self.local_input_flows = []
         self.local_output_flows = []
+        self.internet_output_rate = None
+        self.internet_input_rate = None
+        self.local_input_rate = None
+        self.local_output_rate = None
         self.sampling_rate = 5
+        self.attack_flows = None
 
-    def update_profile(self, malicious_pkts, benign_pkts, compute_attributes):
+    def update_profile(self, malicious_pkts, benign_pkts, compute_attributes=True, *attack_flows):
         # self.port_profile(device_traffic)
-        # for flow_direction in flows:
-            # self.flow_rate = {flow: None for flow in flows[flow_direction]}
         self.input_flow_stats = {flow: {"size": None,
                                   "duration": None,
                                   "jitter": None,
@@ -58,23 +62,29 @@ class DeviceProfile:
                                          "flow type": None
                                         } for flow in self.flows['outgoing']}
         self.all_flow_tuples = [*list(self.flows["incoming"].keys()), *list(self.flows["outgoing"].keys())]
-        # self.set_device_activity(self.sampling_rate)
+        self.set_device_activity()
+        self.attack_flows = attack_flows[0] if attack_flows else None
+        # self.set_flow_direction_rate()
+        # self.sort_flow_location()
+        # self.set_location_direction_rates()
+        # self.plot_location_direction_rate()
         # print(self.device_name)
-        if compute_attributes is True:
-            self.compute_flow_attributes(self.sampling_rate, malicious_pkts, benign_pkts)
+        # if compute_attributes is True:
+        #     self.compute_flow_attributes(self.sampling_rate, malicious_pkts, benign_pkts)
         # self.plot_device_traffic()
         # self.compare_flow_direction_rate(True)
         # self.plot_flow_type()
         # self.set_flow_pairs()
 
 
-
     def sort_flow_location(self, network_obj):
         all_local_network_addresses = list(network_obj.iot_devices.values()) + list(network_obj.non_iot.values()) # mac addresses of local network devices
         # local traffic in pcap
         local_network_addresses = [addr for addr in all_local_network_addresses if addr in list(network_obj.mac_to_ip.keys())]
-
-        for flow in list(self.input_flow_stats.keys()):
+        print(inspect.currentframe().f_code.co_name)
+        for flow in list(self.flows["incoming"].keys()):
+            if flow == 0:
+                print('flow key is:', flow)
             for local_addr in local_network_addresses:
                 # Checks if flow tuple ip src is from local network; loops through mac_to_ip mac keys to get related ip
                 if flow[0] in network_obj.mac_to_ip[local_addr]:
@@ -82,7 +92,9 @@ class DeviceProfile:
                     self.local_input_flows.append(flow)
                 else:
                     self.internet_input_flows.append(flow)
-        for flow in list(self.output_flow_stats.keys()):
+        for flow in list(self.flows['outgoing'].keys()):
+            if flow == 0:
+                print('flow is ', flow)
             for local_addr in local_network_addresses:
                 if flow[1] in network_obj.mac_to_ip[local_addr]:
                     self.local_output_flows.append(flow)
@@ -119,6 +131,7 @@ class DeviceProfile:
         plt.legend(loc='best')
         plt.show()
         plt.savefig(self.device_name + ' flow_location_traffic.png')
+
     def port_profile(self, device_traffic):
         """Port check"""
         for pkt in device_traffic:
@@ -138,14 +151,16 @@ class DeviceProfile:
                         self.unique_ports.append(pkt["udp_data"]["dst_port"])
 
     def compute_flow_attributes(self,tick, malicious_pkts, benign_pkts):
-        avg_tcp_input_pkt_size = []
-        avg_tcp_output_pkt_size = []
-        avg_udp_input_pkt_size = []
-        avg_udp_output_pkt_size = []
-        input_udp_flow_duration = []
-        input_tcp_flow_duration = []
-        output_tcp_flow_duration = []
-        output_udp_flow_duration = []
+        # avg_tcp_input_pkt_size = []
+        # avg_tcp_output_pkt_size = []
+        # avg_udp_input_pkt_size = []
+        # avg_udp_output_pkt_size = []
+        # input_udp_flow_duration = []
+        # input_tcp_flow_duration = []
+        # output_tcp_flow_duration = []
+        # output_udp_flow_duration = []
+
+        print('computing attributes')
         for flow_direction in self.flows:
             flow_keys = list(self.flows[flow_direction].keys())
             if len(flow_keys) == 0:
@@ -165,7 +180,7 @@ class DeviceProfile:
             if len(flow_keys) > 1:
                 last_pkt_time = 0
                 for flow_tuple in range(0, len(flow_keys), 1):
-                    """Iterates through the last packet of each flow and finds the one with the latest timestamp"""
+                    """Iterates through the last packet of each flow and finds the one with the largest timestamp"""
                     if timestamp_type:
                         if last_pkt_time < self.flows[flow_direction][flow_keys[flow_tuple]][-1]['relative_timestamp']:
                             last_pkt_time = self.flows[flow_direction][flow_keys[flow_tuple]][-1]['relative_timestamp']
@@ -179,7 +194,7 @@ class DeviceProfile:
                 else:
                     last_pkt = self.flows[flow_direction][first_flow][-1]['relative_timestamp'].total_seconds()
                 flow_direction_duration = last_pkt - first_pkt_time
-            self.flow_direction_rate[flow_direction] = {key: [0, 0] for key in range(0, int(flow_direction_duration) + 1, tick)}
+            # self.flow_direction_rate[flow_direction] = {key: [0, 0] for key in range(0, int(flow_direction_duration) + 1, tick)}
             self.flow_rate = {flow: None for flow in self.flows[flow_direction]}
             # print(self.flow_rate)
             for flow in self.flows[flow_direction]:
@@ -196,16 +211,21 @@ class DeviceProfile:
                         duration = self.flows[flow_direction][flow][0]['relative_timestamp']
                     else:
                         duration = abs(self.flows[flow_direction][flow][0]['relative_timestamp'].total_seconds())
-                # self.flow_rate[flow] = {key: 0 for key in range(0, int(duration)+1, 10)}
+
+                flow_type = None
+                if flow in self.attack_flows:
+                    flow_type = "attack"
+                else:
+                    flow_type = 'benign'
+                self.flow_rate[flow] = {key: 0 for key in range(0, int(duration)+1, tick)}
                 pkt_count = 0
                 flow_size = 0
                 pkt_size_list = []
                 pkt_times = []
-                flow_type = None
                 for pkt in self.flows[flow_direction][flow]:
                     if flow_type is None or flow_type == "benign":
                         if pkt['ordinal'] in malicious_pkts:
-                            flow_type = "malicious"
+                            flow_type = "attack"
                         else:
                             flow_type = "benign"
                     if timestamp_type:
@@ -216,20 +236,21 @@ class DeviceProfile:
                     payload = self.get_payload(pkt)
                     flow_size += payload
                     pkt_size_list.append(payload)
-                    for i in range(0, int(duration) + 1, tick):
-                        # print(pkt['relative_timestamp'].total_seconds())
-                        # check to make sure pkt is added to right interval for device_activity
-                        if (i <= pkt_ts < i + 1):
-                            # self.flow_rate[flow][i] += payload
-                            try:
-                                assert i <= int(duration)
-                                # self.device_activity[i] += payload
-                                self.flow_direction_rate[flow_direction][i][0] += 1
-                                self.flow_direction_rate[flow_direction][i][1] += payload
-                            except KeyError or AssertionError:
-                                pass
+                    flow_time_interval_key = int(((pkt['relative_timestamp'] - start) // tick) * tick)
+                    self.flow_rate[flow][flow_time_interval_key] += payload
+                    # for i in range(0, int(duration) + 1, tick):
+                    #     # print(pkt['relative_timestamp'].total_seconds())
+                    #     # check to make sure pkt is added to right interval for dict (obtianing key)
+                    #     if (i <= pkt_ts < i + 1):
+                    #         self.flow_rate[flow][i] += payload
+                    #         try:
+                    #             assert i <= int(duration)
+                    #             self.test_rate[i] += payload
+                                #  self.flow_direction_rate[flow_direction][i][0] += 1
+                                 # self.flow_direction_rate[flow_direction][i][1] += payload
+                            # except KeyError or AssertionError:
+                            #     pass
                     pkt_count += 1
-
                 avg_pkt_size = flow_size / pkt_count
                 # pair_count = 0
                 d = 0
@@ -293,13 +314,126 @@ class DeviceProfile:
         if pkt["protocol"] == "TCP":
             payload = pkt["tcp_data"]["payload_len"]
         elif pkt["protocol"] == "UDP":
-            payload =  pkt["udp_data"]["payload_len"]
+            payload = pkt["udp_data"]["payload_len"]
         elif pkt["protocol"] == "ICMP":
-            payload =  pkt["icmp_data"]["payload_len"]
+            payload = pkt["icmp_data"]["payload_len"]
         else:
-            payload =  pkt['payload_len']
+            payload = pkt['payload_len']
+        if payload is None:
+            payload = 0
 
         return payload
+
+    def set_flow_direction_rate(self):
+
+        def set_rate_and_get_first_pkt(flow_direction):
+            # for flow_direction in self.flows:
+            flow_keys = list(self.flows[flow_direction].keys())
+
+            timestamp_type = "float"
+            first_pkt_time = None
+            last_pkt_time = None
+            for flow in self.flows[flow_direction]:
+                """Iterates through the last packet of each flow and finds the one with the largest timestamp"""
+                if first_pkt_time is None and last_pkt_time is None:
+                    first_pkt_time = self.flows[flow_direction][flow][0]['relative_timestamp']
+                    last_pkt_time = self.flows[flow_direction][flow][-1]['relative_timestamp']
+                else:
+                    if timestamp_type:
+                        if last_pkt_time < self.flows[flow_direction][flow][-1]['relative_timestamp']:
+                            last_pkt_time = self.flows[flow_direction][flow][-1]['relative_timestamp']
+                        if first_pkt_time > self.flows[flow_direction][flow][0]['relative_timestamp']:
+                            first_pkt_time = self.flows[flow_direction][flow][0]['relative_timestamp']
+                    else:
+                        if last_pkt_time < self.flows[flow_direction][flow][-1][
+                            'relative_timestamp'].total_seconds():
+                            last_pkt_time = self.flows[flow_direction][flow][-1][
+                                'relative_timestamp'].total_seconds()
+                        if self.flows[flow_direction][flow][0][
+                                'relative_timestamp'].total_seconds() < first_pkt_time:
+                            first_pkt_time = self.flows[flow_direction][flow][0]['relative_timestamp'].total_seconds()
+
+            # flow_direction_duration = last_pkt_time - first_pkt_time
+            flow_direction_duration = last_pkt_time - first_pkt_time
+            self.flow_direction_rate[flow_direction] = {key: [0, 0] for key in range(0, int(flow_direction_duration) + self.sampling_rate, self.sampling_rate)}
+            print("duration", flow_direction_duration)
+            return first_pkt_time
+
+        first_input_pkt_time = set_rate_and_get_first_pkt("incoming")
+        first_output_pkt_time = set_rate_and_get_first_pkt("outgoing")
+
+        # Set byte count according to flow_direction s-second sample window
+        self.set_flow_direction_traffic_rate(direction="incoming", first_pkt_time=first_input_pkt_time)
+        self.set_flow_direction_traffic_rate(direction='outgoing', first_pkt_time=first_output_pkt_time)
+        print(self.flow_direction_rate['incoming'])
+        print(self.flow_direction_rate['outgoing'])
+
+    def set_flow_direction_traffic_rate(self, direction, first_pkt_time):
+
+        for flow in self.flows[direction]:
+            for pkt in self.flows[direction][flow]:
+                # Hash pkt_timestamp into flow_direction_rate dictionary
+                time_interval_key = int(((pkt['relative_timestamp'] - first_pkt_time) // self.sampling_rate) * self.sampling_rate)
+                try:
+                    self.flow_direction_rate[direction][time_interval_key][1] += self.get_payload(pkt)
+                    self.flow_direction_rate[direction][time_interval_key][0] += 1
+                except KeyError as e:
+                    # print("device activity dict key error")
+                    # print("key:", time_interval_key)
+                    if time_interval_key > list(self.flow_direction_rate[direction].keys())[-1]:
+                        print('last device activity key smaller than error key', list(self.flow_direction_rate[direction].keys())[-1])
+                    print('pkt timestamp', pkt['relative_timestamp'])
+                    # print('last timestamp of flow',self.flows[direction][flow][-1]['relative_timestamp'])
+                    print(direction, 'Flow tuple', flow)
+
+    def get_location_direction_rate(self, flow_filter, first_pkt_time, rate_dict, flow_direction):
+        print(inspect.currentframe().f_code.co_name)
+
+        for flow in flow_filter:
+            for pkt in self.flows[flow_direction][flow]:
+                time_interval_key = int(((pkt['relative_timestamp'] - first_pkt_time) // self.sampling_rate) * self.sampling_rate)
+                try:
+                    rate_dict[time_interval_key] += self.get_payload(pkt)
+                except KeyError as e:
+                    print("location direction rate dict keky error")
+                    print("key not in dict", time_interval_key)
+                    print('last key in dict', list(rate_dict.keys())[-1])
+
+
+
+    def set_location_direction_rates(self):
+        # location_direction_types = [self.local_input_flows, self.local_output_flows, self.internet_input_flows, self.internet_output_flows]
+        # for flow_type in location_direction_types:
+        internet_input_first_pkt_time, internet_input_relative_duration = self.get_duration_and_first_pkt_time(self.internet_input_flows, "incoming")
+        self.internet_input_rate = {time_interval: 0 for time_interval in range(0, internet_input_relative_duration + self.sampling_rate, self.sampling_rate)}
+        self.get_location_direction_rate(self.internet_input_flows, internet_input_first_pkt_time, self.internet_input_rate, "incoming")
+        internet_output_first_pkt_time, internet_output_relative_duration = self.get_duration_and_first_pkt_time(
+            self.internet_output_flows, "outgoing")
+        self.internet_output_rate = {time_interval: 0 for time_interval in range(0, internet_output_relative_duration + self.sampling_rate, self.sampling_rate)}
+        self.get_location_direction_rate(self.internet_output_flows, internet_output_first_pkt_time, self.internet_output_rate, "outgoing")
+        local_input_first_pkt_time, local_input_relative_duration = self.get_duration_and_first_pkt_time(
+            self.local_input_flows, "incoming")
+        self.local_input_rate = {time_interval:0 for time_interval in range(0, local_input_relative_duration + self.sampling_rate, self.sampling_rate)}
+        self.get_location_direction_rate(self.local_input_flows, local_input_first_pkt_time, self.local_input_rate, "incoming")
+        local_output_first_pkt_time, local_output_relative_duration = self.get_duration_and_first_pkt_time(
+            self.local_output_flows, "outgoing")
+        self.local_output_rate = {time_interval: 0 for time_interval in range(0, local_output_relative_duration + self.sampling_rate, self.sampling_rate)}
+        self.get_location_direction_rate(self.local_output_flows, local_output_first_pkt_time, self.local_output_rate, "outgoing")
+
+    def get_duration_and_first_pkt_time(self, filter, direction):
+        first_pkt_time = None
+        last_pkt_time = None
+        for flow in filter:
+            first_flow_pkt_time = self.flows[direction][flow][0]['relative_timestamp']
+            last_flow_pkt_time = self.flows[direction][flow][-1]['relative_timestamp']
+            if first_pkt_time is None and last_pkt_time is None:
+                first_pkt_time = first_flow_pkt_time
+                last_pkt_time = last_flow_pkt_time
+            else:
+                first_pkt_time = first_pkt_time if first_pkt_time < first_flow_pkt_time else first_flow_pkt_time
+                last_pkt_time = last_pkt_time if last_pkt_time > last_flow_pkt_time else last_flow_pkt_time
+        return first_pkt_time, int(last_pkt_time-first_pkt_time)
+
 
     def plot_pkt_size(self, tcp_flows, udp_flows):
         """
@@ -320,33 +454,66 @@ class DeviceProfile:
         plt.savefig(self.device_name + ".png")
         plt.show()
 
+    def plot_location_direction_rate(self):
+        fig = plt.figure()
+        ax = fig.add_subplot(1, 1, 1)
+        ax.plot(list(self.internet_input_rate.keys()), list(self.internet_input_rate.values()), label='internet inputs', color='r')
+        ax.plot(list(self.internet_output_rate.keys()), list(self.internet_output_rate.values()), label='internet outputs', color='b')
+        ax.plot(list(self.local_input_rate.keys()), list(self.local_input_rate.values()), label='local inputs', color='m')
+        ax.plot(list(self.local_output_rate.keys()), list(self.local_output_rate.values()), label="local ouputs", color='c')
+        ax.set_xlabel('Duration')
+        ax.set_ylabel('Throughput (bytes)')
+        ax.set_title('Traffic flow segregation')
+        plt.legend(loc='best')
+        plt.savefig(self.device_name + "location_direction_rates.png")
+        plt.show()
+
     def plot_flow_throughput(self):
         fig = plt.figure()
         ax = fig.add_subplot(1, 1, 1)
         tcp_legend_control = 0
         udp_legend_control = 0
+        attack_legend_control = 0
+        benign_legend_control = 0
+        y_max = 0
         for flow in self.flow_rate:
             # rate = np.linspace(np.array(list(self.flow_rate[flow].values())).min(),np.array(list(self.flow_rate[flow].values())).max(),300)
             rate = list(self.flow_rate[flow].values())
             duration = list(self.flow_rate[flow].keys())
-            # spl = make_interp_spline(rate, duration, k =3)
-            # duration_smooth = spl(rate)
+            y_max = max(rate) if max(rate) > y_max else y_max
             if flow[-1] == "TCP":
-                if tcp_legend_control == 0:
-                    ax.plot(duration, rate, color="b", label="TCP")
-                    tcp_legend_control += 1
-                else:
-                    ax.plot(duration, rate, color="b")
-            elif flow[-1] == "UDP":
-                if udp_legend_control == 0:
-                    ax.plot(duration, rate, color="r", label="UDP")
-                    udp_legend_control += 1
+                if '58.182.245.89' in flow and '192.168.1.241' in flow and 37356 in flow:
+                    print(self.flow_rate[flow])
+                    print("flow id", flow)
+            #     if tcp_legend_control == 0:
+            #         ax.plot(duration, rate, color="b", label="TCP")
+            #         tcp_legend_control += 1
+            #     else:
+            #         ax.plot(duration, rate, color="b")
+            # elif flow[-1] == "UDP":
+            #     if udp_legend_control == 0:
+            #         ax.plot(duration, rate, color="r", label="UDP")
+            #         udp_legend_control += 1
+            #     else:
+            #         ax.plot(duration, rate, color='r')
+            if flow in self.attack_flows:
+                if attack_legend_control == 0:
+                    ax.plot(duration, rate, color='r', label="Attack")
+                    attack_legend_control += 1
                 else:
                     ax.plot(duration, rate, color='r')
+            else:
+                if benign_legend_control == 0:
+                    ax.plot(duration, rate, color='b', label="Benign")
+                    benign_legend_control += 1
+                else:
+                    ax.plot(duration, rate, color='b')
+        ax.set_ylim(0, y_max)
+        ax.set_title("Flow Rates")
         ax.set_ylabel("Throughput")
         ax.set_xlabel("Time (seconds)")
         plt.legend(loc='best')
-        plt.savefig("flow-thorughput.png")
+        plt.savefig(self.device_name+"flow-type-thorughput.png")
         plt.show()
 
     def compare_flow_direction_rate(self, plot_byte):
@@ -477,7 +644,7 @@ class DeviceProfile:
         ax2.set_ylabel("Byte rate (Bytes per second)")
         fig2.legend('best')
         plt.savefig(self.device_name + "rate_of_flow_direction.png")
-        self.plot_byte_rate()
+        # self.plot_byte_rate()
 
     def set_device_activity(self):
         """Function creates vector elements which contain the amount of traffic sent/received (bytes) by the device
@@ -513,17 +680,11 @@ class DeviceProfile:
         # print("first pkt time", first_pkt_time)
         # print('last pkt time', last_pkt_time)
         duration = last_pkt_time - first_pkt_time
-        print('duration', duration)
         self.device_activity = {key: 0 for key in range(0, int(duration) +self.sampling_rate, self.sampling_rate)}
         self.get_device_traffic_rate(first_pkt_time)
-        print(self.device_activity)
-
-    def get_first_and_last_flow(self, directiom):
-        flows = list(self.flows[directiom].keys())
-        print(type(self.flows))
-        return flows[0], flows[-1]
 
     def get_device_traffic_rate(self, first_pkt_time):
+
         for flow_direction in self.flows:
             for flow in self.flows[flow_direction]:
                 for pkt in self.flows[flow_direction][flow]:
@@ -540,8 +701,6 @@ class DeviceProfile:
                         print('last timestamp of flow',self.flows[flow_direction][flow][-1]['relative_timestamp'])
                         print(flow_direction, 'Flow tuple', flow)
 
-
-
     def plot_device_traffic(self, x=None, y=None):
         fig = plt.figure()
         ax = fig.add_subplot(1, 1, 1)
@@ -549,12 +708,12 @@ class DeviceProfile:
             ax.plot(list(self.device_activity.keys()), list(self.device_activity.values()), color='b')
         else:
             ax.plot(x, y, color='k')
-        ax.set_ylabel("Size (Bytes)")
+        ax.set_ylabel("Rate (Bytes)")
         ax.set_xlabel("Time (s)")
         plt.savefig(self.device_name+"traffic.png")
         # plt.show()
 
-    def plot_flow_type(self):
+    def plot_flow_type(self, *plot_name):
         """This function is to compare attack and benign flow traffic"""
         size = []
         time = []
@@ -565,35 +724,37 @@ class DeviceProfile:
             flow_size = self.input_flow_stats[flow]['size']
             duration = self.input_flow_stats[flow]['duration']
             # print(self.input_flow_stats[flow]['flow type'])
-            if self.input_flow_stats[flow]['flow type'] == 'malicious':
+            if self.input_flow_stats[flow]['flow type'] == 'attack':
                 mal_size.append(flow_size)
-                mal_time.append(duration)
+                mal_time.append(duration/3600)
             else:
                 size.append(flow_size)
-                time.append(duration)
+                time.append(duration/3600)
         for flow in self.output_flow_stats:
             flow_size = self.output_flow_stats[flow]['size']
             duration = self.output_flow_stats[flow]['duration']
             # print(self.output_flow_stats[flow]['flow type'])
-            if self.output_flow_stats[flow]['flow type'] == 'malicious':
+            if self.output_flow_stats[flow]['flow type'] == 'attack':
                 mal_size.append(flow_size)
-                mal_time.append(duration)
+                mal_time.append(duration/3600)
             else:
                 size.append(flow_size)
-                time.append(duration)
-        t=[]
-        for value in time:
-            t.append(value/3600)
-        # for value in mal_time:
+                time.append(duration/3600)
 
+        # t=[]
+        # for value in time:
+        #     t.append(value/3600)
+        # for value in mal_time:
+        plot_name = plot_name[0] if plot_name else ""
         fig = plt.figure()
         ax = fig.add_subplot(1, 1, 1)
-        ax.scatter(t, size, color = 'g',label='Benign Traffic')
-        # ax.scatter(mal_time, mal_size, color='k', label='Malicious Traffic')
+        ax.scatter(time, size, color = 'b',label='Benign')
+        ax.scatter(mal_time, mal_size, color='r', label='Attack')
         ax.set_xlabel("Flow duration (hours)")
         ax.set_ylabel("Flow size (bytes)")
         plt.legend(loc='best')
-        plt.savefig(self.device_name+"traffictypes.png")
+        plt.savefig(self.device_name+plot_name+"traffictypes.png")
+        plt.show()
 
     def get_flow_jitter(self, flow):
         """This function is intended mainly for analysing command traffic => return pkt number and its associated jitter in the flow"""
@@ -618,27 +779,46 @@ class DeviceProfile:
         plt.savefig(save_folder + location + "commandjitter" + str(iteration) + ".png")
         print("flow jitter comparison plotted")
 
-    def create_traffic_volume_features(self):
-        """Fuction transforms device_activity dictionary from s-second vectors to w-second windows to get extract mean
+    def create_traffic_volume_features(self, traffic_rate_type, w_window):
+        """Fuction transforms device_activity/flow_direction_rate dictionary from s-second vectors to w-second windows to get extract mean
         standard deviation features in each window"""
 
+        if traffic_rate_type == "bidirectional":
+            device_rate_dict = self.device_activity
+        elif traffic_rate_type == "input":
+            device_rate_dict = self.flow_direction_rate['incoming']
+        elif traffic_rate_type == "output":
+            device_rate_dict = self.flow_direction_rate['outgoing']
+        elif traffic_rate_type == "internet_inputs":
+            device_rate_dict = self.internet_input_rate
+        elif traffic_rate_type == "internet_outputs":
+            device_rate_dict = self.internet_output_rate
+        elif traffic_rate_type == "local_inputs":
+            device_rate_dict = self.local_input_rate
+        elif traffic_rate_type == "local_outputs":
+            device_rate_dict = self.local_output_rate
 
         extracted_features = {}
         features = ['volume', 'mean', 'std']
-        duration = list(self.device_activity.keys())[-1]
-        w_window = 500
+        duration = list(device_rate_dict.keys())[-1]
+        # w_window = w_window[0] if w_window else 500
 
         #Initialise feature dictionary and fill values for new w-second window. reference section 5.1.3 https://arxiv.org/pdf/1708.05044.pdf
-        for interval in range(0,list(self.device_activity.keys())[-1] + 1, w_window):
+        for interval in range(0, duration + 1, w_window):
             extracted_features[interval] = {feature: [] if feature == 'volume' else None for feature in features}
-        print(extracted_features.keys())
         step = w_window
-        for time_window in self.device_activity:
+        for time_window in device_rate_dict:
+            if traffic_rate_type != 'incoming' or traffic_rate_type != "outgoing":
+                # structure of flow_direction_rate dictionary (its values are tuples) is different to device_activity
+                byte_count = device_rate_dict[time_window]
+            else:
+                # time_window value = (pkt_count, byte_count) -> we get byte_count
+                byte_count = device_rate_dict[time_window][1]
             try:
                 if time_window < w_window:
-                    extracted_features[w_window]['volume'].append(self.device_activity[time_window])
+                        extracted_features[w_window]['volume'].append(byte_count)
                 elif time_window == w_window:
-                    extracted_features[w_window]['volume'].append(self.device_activity[time_window])
+                    extracted_features[w_window]['volume'].append(byte_count)
                     extracted_features[w_window]['mean'] = statistics.mean(extracted_features[w_window]['volume'])
                     extracted_features[w_window]['std'] = statistics.stdev(extracted_features[w_window]['volume'])
                     w_window += step
@@ -650,3 +830,42 @@ class DeviceProfile:
                     print("extracted_feature keys", extracted_features.keys())
                     print('sampling rate last key', duration)
         return extracted_features
+
+    def get_mean_and_std(self, rate_vectors):
+        """Takes in a flow rate vector dict and returns the mean and std for a cluster plot"""
+        mean = []
+        std = []
+        for interval in rate_vectors:
+            mean_i = rate_vectors[interval]['mean']
+            std_i = rate_vectors[interval]['std']
+            if mean_i is None:
+               mean_i = 0
+            if std_i is None:
+                std_i = 0
+            mean.append(mean_i)
+            std.append(std_i)
+        return mean, std
+
+    def cluster_device_signature_features(self):
+        internet_input_vectors = self.create_traffic_volume_features("internet_inputs")
+        internet_output_vectors = self.create_traffic_volume_features("internet_outputs")
+        local_input_vectors = self.create_traffic_volume_features("local_inputs")
+        local_output_vectors = self.create_traffic_volume_features("local_outputs")
+        fig = plt.figure()
+        ax = fig.add_subplot(1, 1, 1)
+        internet_input_x, internet_input_y = self.get_mean_and_std(internet_input_vectors)
+        internet_output_x, internet_output_y = self.get_mean_and_std(internet_output_vectors)
+        local_input_x, local_input_y = self.get_mean_and_std(local_input_vectors)
+        local_output_x, local_output_y = self.get_mean_and_std(local_output_vectors)
+        if self.device_name == "Samsung SmartCam":
+            print('internet input len',len(internet_input_x), len(internet_input_y))
+            print('local input len', len(local_input_x), len(local_input_y))
+        ax.scatter(internet_input_x, internet_input_y, label='internet inputs', color='b')
+        ax.scatter(internet_output_x, internet_output_y, label='internet_outputs', color='r')
+        ax.scatter(local_input_x, local_input_y, label='local inputs', color='m')
+        ax.scatter(local_output_x, local_output_y, label='local outputs', color='c')
+        ax.set_xlabel("Mean (bytes)")
+        ax.set_ylabel("Standard deviation (bytes)")
+        plt.legend(loc='best')
+        plt.savefig(self.device_name+'location_direction_signature.png')
+        plt.show()
