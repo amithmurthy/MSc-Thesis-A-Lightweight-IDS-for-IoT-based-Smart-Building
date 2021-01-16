@@ -74,6 +74,7 @@ def unpickle_network_trace_and_device_obj(file_path, **kwargs):
     file_filter = kwargs['files'] if 'files' in kwargs.keys() else None
     print("file_filter", file_filter)
     device_filter = kwargs['devices'] if 'devices' in kwargs.keys() else None
+    print("device filter", device_filter)
     limit = kwargs['limit'] if 'limit' in kwargs.keys() else math.inf
     extract_timestamp_dict = kwargs['extract_timestamp'] if 'extract_timestamp' in kwargs.keys() else False
     for network_trace in database.iterdir():
