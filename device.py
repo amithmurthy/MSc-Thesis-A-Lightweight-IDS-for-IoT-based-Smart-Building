@@ -826,7 +826,7 @@ class DeviceProfile:
                 if w_window > duration:
                     break
                 else:
-                    print("key error", e)
+                    print("w_window key error", e)
                     print("extracted_feature keys", extracted_features.keys())
                     print('sampling rate last key', duration)
         return extracted_features
@@ -839,8 +839,10 @@ class DeviceProfile:
             mean_i = rate_vectors[interval]['mean']
             std_i = rate_vectors[interval]['std']
             if mean_i is None:
+               # print('mean is None')
                mean_i = 0
             if std_i is None:
+                # print('std is None')
                 std_i = 0
             mean.append(mean_i)
             std.append(std_i)
