@@ -26,7 +26,8 @@ iot = ["Smart Things", "Amazon Echo", "Netatmo Welcom", "TP-Link Day Night Cloud
 
 infected_devices = ["Belkin wemo motion sensor", "Belkin Wemo switch", "Samsung SmartCam", "Light Bulbs LiFX Smart Bulb","TP-Link Smart plug", "Netatmo Welcom",
                     "Amazon Echo", "TP-Link Smart plug"]
-device_filter = ["Dropcam"]
+
+device_filter = ["Netatmo Welcom"]
 
 device_events = {
     "tplink-plug": {
@@ -140,17 +141,24 @@ def analyse_device_events(file_path, device):
     # model_command_traffic(iot_objects, country, device, path)
 
 def preprocess_device_traffic():
-    network_instances = unpickle_network_trace_and_device_obj(processed_benign_2016,limit=50, devices=device_filter)
+    network_instances = unpickle_network_trace_and_device_obj(processed_attack_traffic,devices=device_filter)
     device_objs = []
     for network_obj in network_instances:
         for device_obj in network_instances[network_obj]:
-            if device_obj.device_name not in device_filter:
-                continue
+            # if device_obj.device_name not in device_filter:
+            #     continue
             device_objs.append(device_obj)
-            device_obj.update_profile([],[], compute_attributes=False)
+            device_obj.update_profile([], [], compute_attributes=False)
             device_obj.sort_flow_location(network_obj)
             device_obj.set_location_direction_rates()
-    ModelDevice(device_objs)
+
+    print('Number of device instances in dataset', len(device_objs))
+    ModelDevice(model_function="preprocess", device_name= device_objs[0].device_name, device_traffic=device_objs)
+
+def train_clustering_model(device):
+    """Train and test device clustering model"""
+    ModelDevice(model_function="anomaly_detection", device_name=device)
+
 
 
 def cluster_device_signature(processed_traffic_path):
@@ -281,7 +289,8 @@ def main():
     processed_attack_traffic = r"C:\Users\amith\Documents\Uni\Masters\processed-traffic\Attack"
     processed_benign_traffic = r"C:\Users\amith\Documents\Uni\Masters\processed-traffic\Benign"
     processed_benign_2016 = r"C:\Users\amith\Documents\Uni\Masters\processed-traffic\2016"
-    preprocess_device_traffic()
+    # preprocess_device_traffic()
+    train_clustering_model("Netatmo Welcom")
     # extract_timestamps(dataset1, processed_benign_2016)
     # modify_timestamp(processed_benign_2016)
     # analyse_dataset(dataset1, processed_benign_2016, malicious_pkts, benign_pkts)
@@ -334,11 +343,14 @@ def main():
 
 if __name__ == "__main__":
     main()
+
     # for device in infected_devices:
-    #     path = r"C:\Users\amith\Documents\Uni\Masters\Implementation\attack"
-    #     path = path +"\_" + device
-    #     folder = Path(path)
-    #     folder.mkdir()
+    #     path = r"C:\Users\amith\Documents\Uni\Masters\Graphs\Machine Learning"
+    #     folder = Path(path) / device
+    #     if folder.is_dir():
+    #         continue
+    #     else:
+    #         folder.mkdir()
 
 
     # thread1 = threading.Thread(target= save_traffic(pcap_file, file_path, devices))
