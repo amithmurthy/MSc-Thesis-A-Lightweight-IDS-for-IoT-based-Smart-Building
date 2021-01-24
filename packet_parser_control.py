@@ -76,12 +76,12 @@ def analyse_dataset(dataset, save_path,malicious_pkts,benign_pkts):
         if str(file)[-13:-5] in processed_files:
             continue
         traffic_file = NetworkTrace(file)
-        analyse_pcap(traffic_file, FileIO(file))
+        analyse_pcap(traffic_file, FileIO(file), count_limit=5)
         print("creating device objects")
         devices = get_device_objects(traffic_file, malicious_pkts, benign_pkts)
         print("saving traffic")
-        save_traffic(traffic_file, save_path, devices)
-        processed_files.append(str(file)[-13:-5])
+        # save_traffic(traffic_file, save_path, devices)
+        # processed_files.append(str(file)[-13:-5])
 
 def analyse_device_events(file_path, device):
     # this is where the pcaps are stored
@@ -157,8 +157,9 @@ def preprocess_device_traffic():
 
 def train_clustering_model(device):
     """Train and test device clustering model"""
-    ModelDevice(model_function="anomaly_detection", device_name=device)
-
+    # ModelDevice(model_function="train", device_name=device)
+    # ModelDevice(model_function="anomaly_detection", device_name=device)
+    ModelDevice(model_function="validate", device_name=device)
 
 
 def cluster_device_signature(processed_traffic_path):
@@ -293,7 +294,7 @@ def main():
     train_clustering_model("Netatmo Welcom")
     # extract_timestamps(dataset1, processed_benign_2016)
     # modify_timestamp(processed_benign_2016)
-    # analyse_dataset(dataset1, processed_benign_2016, malicious_pkts, benign_pkts)
+    # analyse_dataset(attack_dataset, processed_attack_traffic, malicious_pkts, benign_pkts)
     # processed = ["Dropcam", "Amazon Echo", "Netatmo Welcom", "TP-Link Day Night Cloud camera", "Samsung SmartCam"]
 
     # cluster_device_signature(processed_benign_traffic)

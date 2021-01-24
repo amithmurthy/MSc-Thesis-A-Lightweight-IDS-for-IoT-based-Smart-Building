@@ -62,7 +62,7 @@ class DeviceProfile:
                                          "flow type": None
                                         } for flow in self.flows['outgoing']}
         self.all_flow_tuples = [*list(self.flows["incoming"].keys()), *list(self.flows["outgoing"].keys())]
-        self.set_device_activity()
+        # self.set_device_activity()
         self.attack_flows = attack_flows[0] if attack_flows else None
         # self.set_flow_direction_rate()
         # self.sort_flow_location()
@@ -387,7 +387,7 @@ class DeviceProfile:
                     print(direction, 'Flow tuple', flow)
 
     def get_location_direction_rate(self, flow_filter, first_pkt_time, rate_dict, flow_direction):
-        print(inspect.currentframe().f_code.co_name)
+        # print(inspect.currentframe().f_code.co_name)
 
         for flow in flow_filter:
             for pkt in self.flows[flow_direction][flow]:
@@ -646,7 +646,7 @@ class DeviceProfile:
         plt.savefig(self.device_name + "rate_of_flow_direction.png")
         # self.plot_byte_rate()
 
-    def set_device_activity(self):
+    def set_device_activity(self, *args):
         """Function creates vector elements which contain the amount of traffic sent/received (bytes) by the device
         into consecutive s-second samples (tick). """
         first_pkt_time = None
@@ -680,8 +680,12 @@ class DeviceProfile:
         # print("first pkt time", first_pkt_time)
         # print('last pkt time', last_pkt_time)
         duration = last_pkt_time - first_pkt_time
+        if args:
+            return duration
         self.device_activity = {key: 0 for key in range(0, int(duration) +self.sampling_rate, self.sampling_rate)}
         self.get_device_traffic_rate(first_pkt_time)
+
+
 
     def get_device_traffic_rate(self, first_pkt_time):
 

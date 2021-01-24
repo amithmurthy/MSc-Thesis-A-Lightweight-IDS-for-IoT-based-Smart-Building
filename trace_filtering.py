@@ -49,6 +49,7 @@ def analyse_pcap(NetworkTraffic, file, **kwargs):
         epoch_filter = True
         NetworkTraffic.ordinal_timestamp = {}
 
+
     count = 0
     # non_ip_packets = []
     first_pkt_time = None
@@ -62,16 +63,15 @@ def analyse_pcap(NetworkTraffic, file, **kwargs):
             # if device_filter is True:
             #     if ether_pkt.src != device_id and str(ether_pkt.dst) != device_id:
             #         continue
-
             if count == 1:
                 first_pkt_time, relative_ts = get_timestamp(pkt_metadata, count)
                 packet_data['relative_timestamp'] = relative_ts
             else:
                 packet_data['relative_timestamp'] = get_timestamp(pkt_metadata, count, first_pkt_time)
 
-            if epoch_filter is True:
-                NetworkTraffic.ordinal_timestamp[count] = packet_data['relative_timestamp']
-                continue
+            # if epoch_filter is True:
+            #     NetworkTraffic.ordinal_timestamp[count] = packet_data['relative_timestamp']
+            #     continue
             if 'type' not in ether_pkt.fields:
                 # Logic Link Control (LLC) frames will have 'len' instead of 'type'.
                 # We disregard those
@@ -79,7 +79,6 @@ def analyse_pcap(NetworkTraffic, file, **kwargs):
             if ARP in ether_pkt:
                 continue
             ipv = None
-
 
             if IP or IPv6 in ether_pkt:
                 if IPv6 in ether_pkt:
@@ -107,7 +106,6 @@ def analyse_pcap(NetworkTraffic, file, **kwargs):
                 elif ether_pkt.src in list(NetworkTraffic.mac_to_ip.keys()):
                     if ip_pkt.src not in NetworkTraffic.mac_to_ip[ether_pkt.src]:
                         NetworkTraffic.mac_to_ip[ether_pkt.src].append(ip_pkt.src)
-
                 if ether_pkt.dst not in list(NetworkTraffic.mac_to_ip.keys()):
                     NetworkTraffic.mac_to_ip[ether_pkt.dst] = []
                     NetworkTraffic.mac_to_ip[ether_pkt.dst].append(ip_pkt.dst)
