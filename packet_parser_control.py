@@ -24,11 +24,10 @@ iot = ["Smart Things", "Amazon Echo", "Netatmo Welcom", "TP-Link Day Night Cloud
             "Triby Speaker", "PIX-STAR Photo-frame",
             "HP Printer", "Samsung Galaxy Tab", "Nest Dropcam", "TPLink Router Bridge LAN (Gateway)"]
 
-infected_devices = ["Belkin wemo motion sensor", "Belkin Wemo switch", "Samsung SmartCam", "Light Bulbs LiFX Smart Bulb","TP-Link Smart plug", "Netatmo Welcom",
-                    "Amazon Echo", "TP-Link Smart plug"]
 
+infected_devices = ["Belkin wemo motion sensor","Belkin Wemo switch", "Samsung SmartCam", "Light Bulbs LiFX Smart Bulb", "TP-Link Smart plug", "Netatmo Welcom",
+                    "Amazon Echo"]
 device_filter = ["Netatmo Welcom"]
-
 device_events = {
     "tplink-plug": {
         'alexa_off': "2019-05-04_15_27_41.24s",
@@ -140,8 +139,9 @@ def analyse_device_events(file_path, device):
     # make_command_plot_folders()
     # model_command_traffic(iot_objects, country, device, path)
 
-def preprocess_device_traffic():
-    network_instances = unpickle_network_trace_and_device_obj(processed_attack_traffic,devices=device_filter)
+def preprocess_device_traffic(device_filter, data_type):
+    traffic = processed_attack_traffic if data_type == 'attack' else processed_benign_traffic
+    network_instances = unpickle_network_trace_and_device_obj(traffic, devices=device_filter)
     device_objs = []
     for network_obj in network_instances:
         for device_obj in network_instances[network_obj]:
@@ -153,13 +153,13 @@ def preprocess_device_traffic():
             device_obj.set_location_direction_rates()
 
     print('Number of device instances in dataset', len(device_objs))
-    ModelDevice(model_function="preprocess", device_name= device_objs[0].device_name, device_traffic=device_objs)
+    ModelDevice(model_function="preprocess", device_name= device_objs[0].device_name, device_traffic=device_objs, time_scales=[250,500], data_type=data_type)
 
 def train_clustering_model(device):
     """Train and test device clustering model"""
-    # ModelDevice(model_function="train", device_name=device)
+    ModelDevice(model_function="train", device_name=device)
     # ModelDevice(model_function="anomaly_detection", device_name=device)
-    ModelDevice(model_function="validate", device_name=device)
+    # ModelDevice(model_function="validate", device_name=device)
 
 
 def cluster_device_signature(processed_traffic_path):
@@ -290,7 +290,11 @@ def main():
     processed_attack_traffic = r"C:\Users\amith\Documents\Uni\Masters\processed-traffic\Attack"
     processed_benign_traffic = r"C:\Users\amith\Documents\Uni\Masters\processed-traffic\Benign"
     processed_benign_2016 = r"C:\Users\amith\Documents\Uni\Masters\processed-traffic\2016"
-    # preprocess_device_traffic()
+
+    # for device in infected_devices:
+    #     if device == "Netatmo Welcom":
+    #         continue
+        # preprocess_device_traffic(device, 'attack')
     train_clustering_model("Netatmo Welcom")
     # extract_timestamps(dataset1, processed_benign_2016)
     # modify_timestamp(processed_benign_2016)

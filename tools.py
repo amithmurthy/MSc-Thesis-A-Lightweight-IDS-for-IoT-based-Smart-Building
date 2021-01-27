@@ -74,6 +74,8 @@ def unpickle_network_trace_and_device_obj(file_path, **kwargs):
     file_filter = kwargs['files'] if 'files' in kwargs.keys() else None
     print("file_filter", file_filter)
     device_filter = kwargs['devices'] if 'devices' in kwargs.keys() else None
+    if type(device_filter) is not list:
+        device_filter = [device_filter]
     print("device filter", device_filter)
     limit = kwargs['limit'] if 'limit' in kwargs.keys() else math.inf
     extract_timestamp_dict = kwargs['extract_timestamp'] if 'extract_timestamp' in kwargs.keys() else False
@@ -95,7 +97,7 @@ def unpickle_network_trace_and_device_obj(file_path, **kwargs):
                 device_name = file_name.group(1)
                 if "Router" in device_name:
                     continue
-                if device_name not in device_filter or device_name != device_filter:
+                if device_name not in device_filter:
                     continue
                 device_obj = open_device_archive(network_trace_file_path + '\_' + device_name + '-db')
                 network_trace_devices[network_obj].append(device_obj)
@@ -156,6 +158,18 @@ def get_malicious_flows(folder_path):
                         malicious_flows[device][date].append((elements[4], elements[5], int(elements[7]), int(elements[8]), proto))
     return malicious_flows
 
+def get_device_cluster(device):
+    device_cluster = {
+        'Amazon Echo': 5,
+        'Belkin wemo motion sensor': 6,
+        'Belkin Wemo switch': 6,
+        'Light Bulbs LiFX Smart Bulb': 5,
+        'Netatmo Welcom':6,
+        'Samsung SmartCam':6,
+        'TP-Link Smart plug':6
+    }
+
+    return device_cluster[device]
 
 def get_ax():
     fig = plt.figure()
