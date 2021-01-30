@@ -142,23 +142,24 @@ def analyse_device_events(file_path, device):
 def preprocess_device_traffic(device_filter, data_type):
     traffic = processed_attack_traffic if data_type == 'attack' else processed_benign_traffic
     network_instances = unpickle_network_trace_and_device_obj(traffic, devices=device_filter)
-    device_objs = []
+    # attack_network_instances = unpickle_network_trace_and_device_obj(processed_attack_traffic, devices=device_filter)
+    device_traffic = []
     for network_obj in network_instances:
         for device_obj in network_instances[network_obj]:
             # if device_obj.device_name not in device_filter:
             #     continue
-            device_objs.append(device_obj)
+            device_traffic.append(device_obj)
             device_obj.update_profile([], [], compute_attributes=False)
             device_obj.sort_flow_location(network_obj)
             device_obj.set_location_direction_rates()
 
-    print('Number of device instances in dataset', len(device_objs))
-    ModelDevice(model_function="preprocess", device_name= device_objs[0].device_name, device_traffic=device_objs, time_scales=[250,500], data_type=data_type)
+    # print('Number of device instances in dataset')
+    ModelDevice(model_function="preprocess", device_name=device_filter, device_traffic=device_traffic, time_scales=[200, 300], data_type=data_type)
 
 def train_clustering_model(device):
     """Train and test device clustering model"""
     ModelDevice(model_function="train", device_name=device)
-    # ModelDevice(model_function="anomaly_detection", device_name=device)
+    ModelDevice(model_function="anomaly_detection", device_name=device)
     # ModelDevice(model_function="validate", device_name=device)
 
 
@@ -292,10 +293,12 @@ def main():
     processed_benign_2016 = r"C:\Users\amith\Documents\Uni\Masters\processed-traffic\2016"
 
     # for device in infected_devices:
-    #     if device == "Netatmo Welcom":
-    #         continue
-        # preprocess_device_traffic(device, 'attack')
-    train_clustering_model("Netatmo Welcom")
+        # if device == "Belkin":
+        #     continue
+    # preprocess_device_traffic("TP-Link Smart plug", 'benign')
+    # preprocess_device_traffic("TP-Link Smart plug", 'attack')
+    train_clustering_model("TP-Link Smart plug")
+    # train_clustering_model("Belkin wemo motion sensor")
     # extract_timestamps(dataset1, processed_benign_2016)
     # modify_timestamp(processed_benign_2016)
     # analyse_dataset(attack_dataset, processed_attack_traffic, malicious_pkts, benign_pkts)
