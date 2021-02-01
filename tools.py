@@ -166,7 +166,7 @@ def get_device_cluster(device):
         'Light Bulbs LiFX Smart Bulb': 5,
         'Netatmo Welcom':6,
         'Samsung SmartCam':6,
-        'TP-Link Smart plug':6
+        'TP-Link Smart plug':5
     }
 
     return device_cluster[device]

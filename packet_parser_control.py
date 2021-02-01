@@ -151,13 +151,14 @@ def preprocess_device_traffic(device_filter, data_type):
             device_traffic.append(device_obj)
             device_obj.update_profile([], [], compute_attributes=False)
             device_obj.sort_flow_location(network_obj)
-            device_obj.set_location_direction_rates()
+            # device_obj.set_location_direction_rates()
 
     # print('Number of device instances in dataset')
-    ModelDevice(model_function="preprocess", device_name=device_filter, device_traffic=device_traffic, time_scales=[200, 300], data_type=data_type)
+    ModelDevice(model_function="preprocess", device_name=device_filter, device_traffic= device_traffic, time_scales=[200, 300], data_type=data_type)
 
 def train_clustering_model(device):
     """Train and test device clustering model"""
+    # ModelDevice(model_function='preprocess', saved_features=True, time_scales=[200,300], device_name=device)
     ModelDevice(model_function="train", device_name=device)
     ModelDevice(model_function="anomaly_detection", device_name=device)
     # ModelDevice(model_function="validate", device_name=device)
