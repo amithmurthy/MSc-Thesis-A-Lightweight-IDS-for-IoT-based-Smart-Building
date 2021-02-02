@@ -9,11 +9,12 @@ from scapy.all import *
 from scapy.layers.l2 import Ether
 import klepto as kl
 from multiprocessing import Pool
+from copy import deepcopy
 # import tensorflow as tf
 from pathlib import Path
 import pandas as pd
 import numpy as np
-from tools import get_mac_addr, unpickle_network_trace_and_device_obj, get_device_cluster
+from tools import *
 import time
 from datetime import datetime
 from io import FileIO
@@ -37,15 +38,16 @@ class ModelDevice:
                          'internet_inputs_mean_bytes', 'internet_inputs_std_bytes', 'internet_outputs_mean_bytes', 'internet_outputs_std_bytes',
                          'local_inputs_mean_pkts', 'local_inputs_std_pkts', 'local_outputs_mean_pkts', 'local_outputs_std_pkts', 'internet_inputs_mean_pkts',
                          'internet_inputs_std_pkts', 'internet_outputs_mean_pkts', 'internet_outputs_std_pkts']
-        self.first_time_scale_features = {feature: [] for feature in self.features}
-        self.second_time_scale_features = {feature: [] for feature in self.features}
+        self.sampling_rates = kwargs['sampling_rate'] if 'sampling_rate' in kwargs else [5]
+        self.first_time_scale_features = {sampling_rate: {feature: [] for feature in self.features} for sampling_rate in self.sampling_rates}
+        self.second_time_scale_features = deepcopy(self.first_time_scale_features)
         self.device_folder = Path(r"C:\Users\amith\Documents\Uni\Masters\device_attributes") / device_name
         self.training_data = Path(r"C:\Users\amith\Documents\Uni\Masters\device_attributes") / device_name / "Benign"
         self.attack_data = Path(r"C:\Users\amith\Documents\Uni\Masters\device_attributes") / device_name / "Attack"
         self.save_plot_path = Path(r"C:\Users\amith\Documents\Uni\Masters\Graphs\Machine Learning") / device_name
         self.time_scales = kwargs['time_scales'] if 'time_scales' in kwargs else None
         self.experiment = kwargs['experiment'] if 'experiment' in kwargs else "all"
-        self.sampling_rates = kwargs['sampling_rate'] if 'sampling_rate' in kwargs else [5, 10]
+        self.feature_map = get_device_feature(device_name)
         print(device_name)
         self.device_name = device_name
         if model_function == 'preprocess':
@@ -75,24 +77,20 @@ class ModelDevice:
                 self.attack_metadata = OrderedDict
                 self.validate_anomalies()
 
-    def get_count_type_features(self, device_obj, time_scale_dict, count_type):
-        local_input_mean, local_input_std = device_obj.get_mean_and_std(time_scale_dict['local_inputs'],count_type)
-        local_output_mean, local_output_std = device_obj.get_mean_and_std(time_scale_dict['local_outputs'],count_type)
-        internet_input_mean, internet_input_std = device_obj.get_mean_and_std(time_scale_dict['internet_inputs'], count_type)
-        internet_output_mean, internet_output_std = device_obj.get_mean_and_std(time_scale_dict['internet_outputs'], count_type)
-        return local_input_mean, local_input_std, local_output_mean, local_output_std, internet_input_mean, internet_input_std, internet_output_mean, internet_output_std
 
-    def get_time_scale_features(self, device_obj, data_type):
+
+    def get_time_scale_features(self, device_obj):
         """TODO: Abstraction for time_scale required. Currently, only processes two time_scales at a time. """
         flows = ['local_inputs', 'local_outputs', 'internet_inputs', 'internet_outputs']
-        first_time_scale = {attr: None for attr in flows}
-        second_time_scale = {attr: None for attr in flows}
+        first_time_scale = {}
+        second_time_scale = {}
 
-        print("Getting time scale features...")
-        for attribute in flows:
-
-            first_time_scale[attribute] = device_obj.create_traffic_volume_features(attribute, w_window=self.time_scales[0])
-            second_time_scale[attribute] = device_obj.create_traffic_volume_features(attribute, w_window=self.time_scales[1])
+        def get_count_type_features(device, time_scale_dict, count_type):
+            local_input_mean, local_input_std = device.get_mean_and_std(time_scale_dict['local_inputs'], count_type)
+            local_output_mean, local_output_std = device.get_mean_and_std(time_scale_dict['local_outputs'],count_type)
+            internet_input_mean, internet_input_std = device.get_mean_and_std(time_scale_dict['internet_inputs'],count_type)
+            internet_output_mean, internet_output_std = device.get_mean_and_std(time_scale_dict['internet_outputs'],count_type)
+            return [local_input_mean, local_input_std, local_output_mean, local_output_std, internet_input_mean, internet_input_std, internet_output_mean, internet_output_std]
 
         def get_features(time_scale_dict):
             # local_input_mean_bytes, local_input_std_bytes = device_obj.get_mean_and_std(time_scale_dict['local_inputs'], 'byte_count')
@@ -103,49 +101,91 @@ class ModelDevice:
             # local_output_mean_pkts, local_output_std_pkts = device_obj.get_mean_and_std(time_scale_dict['local_outputs'], 'pkt_count')
             # internet_input_mean_pkts, internet_input_std_pkts = device_obj.get_mean_and_std(time_scale_dict['internet_inputs'], 'pkt_count')
             # internet_output_mean_pkts, internet_output_std_pkts = device_obj.get_mean_and_std(time_scale_dict['internet_outputs'], 'pkt_count')
-            pkt_features = self.get_pkt_count_features(device_obj, time_scale_dict)
-            return local_input_mean_bytes, local_input_std_bytes, local_output_mean_bytes, local_output_std_bytes, internet_input_mean_bytes, internet_input_std_bytes, internet_output_mean_bytes, \
-                   internet_output_std_bytes,
+            if 'pkt_count' in self.feature_map:
+                byte_features = get_count_type_features(device_obj, time_scale_dict, 'byte_count')
+                pkt_features = get_count_type_features(device_obj, time_scale_dict, 'pkt_count')
+                print('byte_count', type(byte_features))
+                return [byte_features, pkt_features]
+            else:
+                print('only byte_count extracted')
+                byte_features = get_count_type_features(device_obj, time_scale_dict, 'byte_count')
+                return byte_features
+            # return local_input_mean, local_input_std, local_output_mean, local_output_std, internet_input_mean, internet_input_std, internet_output_mean, internet_output_std
 
-        def set_features(time_scale_feat, time_scale_feat_dict):
-            for i in range(0, len(self.features)):
-                time_scale_feat_dict[self.features[i]].extend(time_scale_feat[i])
+        def set_features(extracted_feat_list, global_feature_dict):
+            flat_list = [item for sublist in extracted_feat_list for item in sublist]
+            print(len(flat_list))
+            for i in range(0, len(flat_list)):
+                global_feature_dict[self.features[i]].extend(flat_list[i])
 
-        first_time_scale_feat = get_features(first_time_scale)
-        second_time_scale_feat = get_features(second_time_scale)
-        set_features(first_time_scale_feat, self.first_time_scale_features)
-        set_features(second_time_scale_feat, self.second_time_scale_features)
-
+        # local time scale dict not initialised in for loops above as for loop necessary below i.e. less time complexity
+        for sampling_rate in self.sampling_rates:
+            first_time_scale[sampling_rate] = {attr: None for attr in flows}
+            second_time_scale[sampling_rate] = {attr: None for attr in flows}
+            device_obj.set_sampling_rate(sampling_rate)
+            device_obj.set_location_direction_rates()
+            for attribute in flows:
+                first_time_scale[sampling_rate][attribute] = device_obj.create_traffic_volume_features(attribute, w_window=self.time_scales[0])
+                second_time_scale[sampling_rate][attribute] = device_obj.create_traffic_volume_features(attribute, w_window=self.time_scales[1])
+            first_time_scale_feat = get_features(first_time_scale[sampling_rate])
+            second_time_scale_feat = get_features(second_time_scale[sampling_rate])
+            set_features(first_time_scale_feat, self.first_time_scale_features[sampling_rate])
+            set_features(second_time_scale_feat, self.second_time_scale_features[sampling_rate])
 
     def process_all_traffic(self):
         if self.saved_features is False:
+            i = 0
             for device_obj in self.device_traffic:
-                self.get_time_scale_features(device_obj, 'benign')
-        self.save_device_traffic_attributes()
-        # self.plot_attribute_cluster("first")
-        # self.plot_attribute_cluster("second")
+                if i < 10:
+                    self.get_time_scale_features(device_obj)
+                else:
+                    break
+                i += 1
+        # self.save_device_traffic_attributes()
+        # self.plot_attribute_cluster("first", self.sampling_rates[0])
+        # self.plot_attribute_cluster("second",self.sampling_rates[0])
+        self.compare_sampling_window(self.first_time_scale_features,'internet')
+        self.compare_sampling_window(self.first_time_scale_features, 'local')
+        self.compare_sampling_window(self.second_time_scale_features, 'internet')
+        self.compare_sampling_window(self.second_time_scale_features, 'local')
 
-    def plot_attribute_cluster(self, time_scale_dict):
+    def compare_sampling_window(self, time_scale, location):
+        """time_scale = time_scale_features"""
+        fig = plt.figure()
+        ax = fig.add_subplot(1, 1, 1)
+        name = "Sliding window " + location +" singature comparison"
+        ax.set_title(name)
+        ax.set_xlabel("mean (bytes)")
+        ax.set_ylabel("standard deviation (bytes)")
+        sample_rate_1 = time_scale[self.sampling_rates[0]]
+        sample_rate_2 = time_scale[self.sampling_rates[1]]
+        ax.scatter(sample_rate_1[location+'_inputs_mean_bytes'], sample_rate_1[location+'_inputs_std_bytes'], label= str(self.sampling_rates[0])+" "+location+' inputs', color='g', alpha = 0.6)
+        ax.scatter(sample_rate_2[location+'_inputs_mean_bytes'], sample_rate_2[location+'_inputs_std_bytes'], label= str(self.sampling_rates[1])+" "+location+' inputs', color='c', alpha = 0.6)
+        ax.scatter(sample_rate_1[location+'_outputs_mean_bytes'], sample_rate_1[location+'_outputs_std_bytes'], label= str(self.sampling_rates[0])+" "+location+' outputs', color='r', alpha = 0.6)
+        ax.scatter(sample_rate_2[location+'_outputs_mean_bytes'], sample_rate_2[location+'_outputs_std_bytes'], label= str(self.sampling_rates[1])+" "+location+' outputs', color='b', alpha = 0.6)
+        plt.legend(loc='best')
+        plt.savefig(str(self.save_plot_path) + name + "attributes.png")
+        plt.show()
+
+    def plot_attribute_cluster(self, time_scale_dict, sampling_rate):
         fig = plt.figure()
         ax = fig.add_subplot(1,1,1)
         if time_scale_dict == "first":
-            time_scale = self.first_time_scale_features
+            time_scale = self.first_time_scale_features[sampling_rate]
             name = self.device_name + " "+str(self.time_scales[0]) + " " + self.data_type
         elif time_scale_dict == "second":
-            time_scale = self.second_time_scale_features
+            time_scale = self.second_time_scale_features[sampling_rate]
             name = self.device_name +" "+ str(self.time_scales[1]) + " " + self.data_type
 
         ax.set_title(name+" signature")
         ax.set_xlabel("mean (bytes)")
         ax.set_ylabel("standard deviation (bytes)")
-        ax.scatter(time_scale['local_inputs_mean'], time_scale['local_inputs_std'], label="local inputs", color='r', alpha=0.6)
-        ax.scatter(time_scale['local_outputs_mean'],
-                   time_scale['local_outputs_std'], label="local outputs", color='b', alpha=0.6)
-        ax.scatter(time_scale['internet_inputs_mean'], time_scale['internet_inputs_std'], label='internet inputs', color='g', alpha=0.6)
-        ax.scatter(time_scale['internet_outputs_mean'],
-                   time_scale['internet_outputs_std'], label='internet outputs', color='c', alpha=0.6)
+        ax.scatter(time_scale['local_inputs_mean_bytes'], time_scale['local_inputs_std_bytes'], label="local inputs", color='r', alpha=0.6)
+        ax.scatter(time_scale['local_outputs_mean_bytes'], time_scale['local_outputs_std_bytes'], label="local outputs", color='b', alpha=0.6)
+        ax.scatter(time_scale['internet_inputs_mean_bytes'], time_scale['internet_inputs_std_bytes'], label='internet inputs', color='g', alpha=0.6)
+        ax.scatter(time_scale['internet_outputs_mean_bytes'], time_scale['internet_outputs_std_bytes'], label='internet outputs', color='c', alpha=0.6)
         plt.legend(loc='best')
-        plt.savefig(str(self.save_plot_path) + name + "attributes.png")
+        plt.savefig(str(self.save_plot_path) + name +str(sampling_rate) +"attributes.png")
         plt.show()
 
     def normalise_time_scale(self, df, ts):
@@ -166,16 +206,17 @@ class ModelDevice:
     @staticmethod
     def get_time_scale_df(time_scale_features, time_scale):
         df = pd.DataFrame()
-        for key in time_scale_features:
-            header = str(time_scale) + '_' + str(key)
-            df[header] = pd.Series(time_scale_features[key])
+        for sampling_rate in time_scale_features:
+            for feature in time_scale_features[sampling_rate]:
+                header = str(sampling_rate) + '_' + str(time_scale) + '_' + str(feature)
+                df[header] = pd.Series(time_scale_features[sampling_rate][feature])
         return df
 
     def save_device_traffic_attributes(self):
         """Takes in one single device instance"""
         # rows = zip(first_time_scale_cols, second_time_scale_cols)
         file_path = Path(r"C:\Users\amith\Documents\Uni\Masters\device_attributes") / self.device_name / "normalised"
-        save_feature_df = self.device_folder / 'features'
+        save_feature_df  = self.device_folder / 'features'
         if self.saved_features is False:
             df_first_time_scale, df_second_time_scale = self.get_time_scale_df(self.first_time_scale_features, self.time_scales[0]), self.get_time_scale_df(self.second_time_scale_features, self.time_scales[1])
         else:
@@ -196,6 +237,7 @@ class ModelDevice:
         # Compute z-scores for attributes
         z_score_cols = []
         def z_score(cols, df, org_df, ts):
+            print('calculating z-score')
             file_path = Path(r"C:\Users\amith\Documents\Uni\Masters\device_attributes") / self.device_name / "kmeans-model" / (str(ts) + '-zscore')
             if file_path.is_dir() is False:
                 file_path.mkdir()
@@ -220,20 +262,20 @@ class ModelDevice:
         print('saving')
         df_first_time_scale = df_first_time_scale.fillna(0)
         df_second_time_scale = df_second_time_scale.fillna(0)
-        # df_first_time_scale.to_csv(str(save_feature_df / (str(self.time_scales[0]) + self.data_type + "s.csv")))
-        # df_second_time_scale.to_csv(str(save_feature_df / (str(self.time_scales[1]) + self.data_type + "s.csv")))
+        df_first_time_scale.to_csv(str(save_feature_df / (str(self.time_scales[0]) + self.data_type + "s.csv")))
+        df_second_time_scale.to_csv(str(save_feature_df / (str(self.time_scales[1]) + self.data_type + "s.csv")))
 
         # df_first_time_scale.to_csv(str(file_path / str(self.time_scales[0]))+self.data_type+".csv")
-        # df_second_time_scale = self.normalise_time_scale(df_second_time_scale, self.time_scales[1])
+        df_second_time_scale = self.normalise_time_scale(df_second_time_scale, self.time_scales[1])
         # df_second_time_scale.to_csv(str(file_path / str(self.time_scales[1]))+self.data_type+".csv")
-        df_first_time_zscore = z_score(list(df_first_time_scale.columns), pd.DataFrame(), df_first_time_scale, self.time_scales[0])
-        df_second_time_zscore = z_score(list(df_second_time_scale.columns), pd.DataFrame(), df_second_time_scale, self.time_scales[1])
-        std_scaler_test = self.normalise_time_scale(df_first_time_scale, self.time_scales[0])
-        df_first_time_zscore.to_csv(str(file_path / str(self.time_scales[0]))+self.data_type+".csv")
-        df_second_time_zscore.to_csv(str(file_path / str(self.time_scales[1]))+self.data_type+".csv")
+        # df_first_time_zscore = z_score(list(df_first_time_scale.columns), pd.DataFrame(), df_first_time_scale, self.time_scales[0])
+        # df_second_time_zscore = z_score(list(df_second_time_scale.columns), pd.DataFrame(), df_second_time_scale, self.time_scales[1])
+        # std_scaler_test = self.normalise_time_scale(df_first_time_scale, self.time_scales[0])
+        # df_first_time_zscore.to_csv(str(file_path / str(self.time_scales[0]))+self.data_type+".csv")
+        # df_second_time_zscore.to_csv(str(file_path / str(self.time_scales[1]))+self.data_type+".csv")
 
-        std_scaler_test.to_csv(str(self.device_folder/ "standard-scaler-test.csv"))
-        # df_first_time_scale.to_csv(str(file_path))
+        # std_scaler_test.to_csv(str(self.device_folder/ "standard-scaler-test.csv"))
+        df_first_time_scale.to_csv(str(file_path))
         # test = self.clean_dataset(df_second_time_zscore)
         # df_first_time_scale = clean_dataset(df_first_time_scale)
 
@@ -244,7 +286,6 @@ class ModelDevice:
         p = Pool(len(time_scale_files))
         # print('time_scale_files', time_scale_files)
         # p.map(self.train_time_scale_model, time_scale_files)
-
         if self.experiment != 'all':
             self.train_time_scale_model(self.experiment)
         else:
@@ -487,8 +528,10 @@ class ModelDevice:
                     i += 1
         for ts in tp_anomalies:
             print(ts)
+            print(tp_anomalies[ts])
             total = len(self.anomaly_timestamp[ts])
             tp = len(tp_anomalies[ts])
+            print('len of identified', tp)
             print('TP:',  tp / total)
             print('FP:', (total - tp) / total)
 

@@ -25,7 +25,7 @@ iot = ["Smart Things", "Amazon Echo", "Netatmo Welcom", "TP-Link Day Night Cloud
             "HP Printer", "Samsung Galaxy Tab", "Nest Dropcam", "TPLink Router Bridge LAN (Gateway)"]
 
 
-infected_devices = ["Belkin wemo motion sensor","Belkin Wemo switch", "Samsung SmartCam", "Light Bulbs LiFX Smart Bulb", "TP-Link Smart plug", "Netatmo Welcom",
+infected_devices = ["Belkin wemo motion sensor", "Belkin Wemo switch", "Samsung SmartCam", "Light Bulbs LiFX Smart Bulb", "TP-Link Smart plug", "Netatmo Welcom",
                     "Amazon Echo"]
 device_filter = ["Netatmo Welcom"]
 device_events = {
@@ -154,7 +154,7 @@ def preprocess_device_traffic(device_filter, data_type):
             # device_obj.set_location_direction_rates()
 
     # print('Number of device instances in dataset')
-    ModelDevice(model_function="preprocess", device_name=device_filter, device_traffic= device_traffic, time_scales=[200, 300], data_type=data_type)
+    ModelDevice(model_function="preprocess", device_name=device_filter, device_traffic= device_traffic, time_scales=[50, 100], data_type=data_type, sampling_rate=[5,10])
 
 def train_clustering_model(device):
     """Train and test device clustering model"""
@@ -296,10 +296,10 @@ def main():
     # for device in infected_devices:
         # if device == "Belkin":
         #     continue
-    # preprocess_device_traffic("TP-Link Smart plug", 'benign')
+    preprocess_device_traffic("TP-Link Smart plug", 'attack')
     # preprocess_device_traffic("TP-Link Smart plug", 'attack')
-    train_clustering_model("TP-Link Smart plug")
-    # train_clustering_model("Belkin wemo motion sensor")
+    # train_clustering_model("Belkin Wemo switch")
+    # train_clustering_model("Samsung SmartCam")
     # extract_timestamps(dataset1, processed_benign_2016)
     # modify_timestamp(processed_benign_2016)
     # analyse_dataset(attack_dataset, processed_attack_traffic, malicious_pkts, benign_pkts)
@@ -325,7 +325,7 @@ def main():
     def process_benign_traffic():
         for device in iot:
             print(device)
-            device_objs, network_objs,dates = unpickle_device_objects(processed_benign_traffic, device, "mal")
+            device_objs, network_objs, dates = unpickle_device_objects(processed_benign_traffic, device, "mal")
             # print(x)
             # make_graphs = model_device_behaviour(device_objs,dates , mal_flows={}, save_folder=r"D:", behaviour_type='benign')
             extract_packet_level_signature(device_objs)
