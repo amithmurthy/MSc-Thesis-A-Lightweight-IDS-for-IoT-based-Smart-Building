@@ -154,12 +154,12 @@ def preprocess_device_traffic(device_filter, data_type):
             # device_obj.set_location_direction_rates()
 
     # print('Number of device instances in dataset')
-    ModelDevice(model_function="preprocess", device_name=device_filter, device_traffic= device_traffic, time_scales=[50, 100], data_type=data_type, sampling_rate=[5,10])
+    ModelDevice(model_function="preprocess", device_name=device_filter, device_traffic=device_traffic, time_scales=[50, 100], data_type=data_type, sampling_rate=[5, 10])
 
 def train_clustering_model(device):
     """Train and test device clustering model"""
     # ModelDevice(model_function='preprocess', saved_features=True, time_scales=[200,300], device_name=device)
-    ModelDevice(model_function="train", device_name=device)
+    # ModelDevice(model_function="train", device_name=device)
     ModelDevice(model_function="anomaly_detection", device_name=device)
     # ModelDevice(model_function="validate", device_name=device)
 
@@ -293,12 +293,12 @@ def main():
     processed_benign_traffic = r"C:\Users\amith\Documents\Uni\Masters\processed-traffic\Benign"
     processed_benign_2016 = r"C:\Users\amith\Documents\Uni\Masters\processed-traffic\2016"
 
-    # for device in infected_devices:
-        # if device == "Belkin":
+    for device in infected_devices:
+        # if device == "Amazon Echo":
         #     continue
-    preprocess_device_traffic("TP-Link Smart plug", 'attack')
-    # preprocess_device_traffic("TP-Link Smart plug", 'attack')
-    # train_clustering_model("Belkin Wemo switch")
+        preprocess_device_traffic(device, 'benign')
+        preprocess_device_traffic(device, 'attack')
+    # train_clustering_model("Amazon Echo")
     # train_clustering_model("Samsung SmartCam")
     # extract_timestamps(dataset1, processed_benign_2016)
     # modify_timestamp(processed_benign_2016)

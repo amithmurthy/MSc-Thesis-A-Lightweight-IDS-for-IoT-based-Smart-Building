@@ -158,18 +158,32 @@ def get_malicious_flows(folder_path):
                         malicious_flows[device][date].append((elements[4], elements[5], int(elements[7]), int(elements[8]), proto))
     return malicious_flows
 
-def get_device_cluster(device):
+def get_device_cluster(device, location, time_scale):
     device_cluster = {
-        'Amazon Echo': 5,
-        'Belkin wemo motion sensor': 6,
-        'Belkin Wemo switch': 6,
+        'Amazon Echo': {'internet':{'50s':9, '100s':9}, 'local':{'50s':9,'100s':7}},
+        'Belkin wemo motion sensor': 5,
+        'Belkin Wemo switch': 5,
         'Light Bulbs LiFX Smart Bulb': 5,
         'Netatmo Welcom':6,
         'Samsung SmartCam':6,
         'TP-Link Smart plug':5
     }
 
-    return device_cluster[device]
+    return device_cluster[device][location][time_scale]
+
+def get_device_feature(device):
+    """From experimentation which features are effective"""
+    default_features = ['byte_count', 'pkt_count']
+    device_feature_mapper = {
+        'Amazon Echo': default_features,
+        'Belkin wemo motion sensor': default_features,
+        'Belkin Wemo switch': default_features,
+        'Light Bulbs LiFX Smart Bulb': default_features,
+        'Netatmo Welcom': default_features,
+        'Samsung SmartCam': default_features,
+        'TP-Link Smart  plug': default_features
+    }
+    return device_feature_mapper[device]
 
 def get_ax():
     fig = plt.figure()
