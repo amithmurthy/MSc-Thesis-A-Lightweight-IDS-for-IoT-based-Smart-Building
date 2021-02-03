@@ -3,6 +3,7 @@ import matplotlib.pyplot as plt
 from matplotlib.pyplot import cm
 from scipy.interpolate import make_interp_spline, BSpline
 import numpy as np
+from copy import deepcopy
 import statistics
 import inspect
 from sklearn.cluster import DBSCAN
@@ -10,7 +11,7 @@ from sklearn.cluster import DBSCAN
 
 class DeviceProfile:
 
-    def __init__(self, device_name, mac_address, ip_addrs, traffic, ):
+    def __init__(self, device_name, mac_address, ip_addrs, traffic):
         self.device_name = device_name
         self.mac_address = mac_address
         self.ip_addrs = ip_addrs
@@ -35,10 +36,18 @@ class DeviceProfile:
         self.local_input_flows = []
         self.local_output_flows = []
         self.internet_output_rate = None
+        self.internet_output_pkt_rate = None
         self.internet_input_rate = None
+        self.internet_input_pkt_rate = None
         self.local_input_rate = None
+        self.local_input_pkt_rate = None
         self.local_output_rate = None
-        self.sampling_rate = 5
+        self.local_output_pkt_rate = None
+        self.sampling_rate = None
+        self.internet_input_duration, self.internet_input_first_pkt = None, None
+        self.internet_output_duration, self.internet_output_first_pkt = None, None
+        self.local_input_duration, self.local_input_first_pkt = None, None
+        self.local_output_duration, self.local_output_first_pkt = None, None
         self.attack_flows = None
 
     def update_profile(self, malicious_pkts, benign_pkts, compute_attributes=True, *attack_flows):
@@ -76,12 +85,11 @@ class DeviceProfile:
         # self.plot_flow_type()
         # self.set_flow_pairs()
 
-
     def sort_flow_location(self, network_obj):
         all_local_network_addresses = list(network_obj.iot_devices.values()) + list(network_obj.non_iot.values()) # mac addresses of local network devices
         # local traffic in pcap
         local_network_addresses = [addr for addr in all_local_network_addresses if addr in list(network_obj.mac_to_ip.keys())]
-        print(inspect.currentframe().f_code.co_name)
+        # print(inspect.currentframe().f_code.co_name)
         for flow in list(self.flows["incoming"].keys()):
             if flow == 0:
                 print('flow key is:', flow)
@@ -321,8 +329,10 @@ class DeviceProfile:
             payload = pkt['payload_len']
         if payload is None:
             payload = 0
-
         return payload
+
+    def set_sampling_rate(self, sampling_rate):
+        self.sampling_rate = sampling_rate
 
     def set_flow_direction_rate(self):
 
@@ -386,39 +396,90 @@ class DeviceProfile:
                     # print('last timestamp of flow',self.flows[direction][flow][-1]['relative_timestamp'])
                     print(direction, 'Flow tuple', flow)
 
-    def get_location_direction_rate(self, flow_filter, first_pkt_time, rate_dict, flow_direction):
+    def get_location_direction_rate(self, flow_filter, first_pkt_time, rate_dict, pkt_rate_dict, flow_direction):
         # print(inspect.currentframe().f_code.co_name)
-
         for flow in flow_filter:
             for pkt in self.flows[flow_direction][flow]:
                 time_interval_key = int(((pkt['relative_timestamp'] - first_pkt_time) // self.sampling_rate) * self.sampling_rate)
                 try:
+                    pkt_rate_dict[time_interval_key] += 1
                     rate_dict[time_interval_key] += self.get_payload(pkt)
                 except KeyError as e:
                     print("location direction rate dict keky error")
                     print("key not in dict", time_interval_key)
                     print('last key in dict', list(rate_dict.keys())[-1])
 
-
-
     def set_location_direction_rates(self):
-        # location_direction_types = [self.local_input_flows, self.local_output_flows, self.internet_input_flows, self.internet_output_flows]
-        # for flow_type in location_direction_types:
-        internet_input_first_pkt_time, internet_input_relative_duration = self.get_duration_and_first_pkt_time(self.internet_input_flows, "incoming")
-        self.internet_input_rate = {time_interval: 0 for time_interval in range(0, internet_input_relative_duration + self.sampling_rate, self.sampling_rate)}
-        self.get_location_direction_rate(self.internet_input_flows, internet_input_first_pkt_time, self.internet_input_rate, "incoming")
-        internet_output_first_pkt_time, internet_output_relative_duration = self.get_duration_and_first_pkt_time(
-            self.internet_output_flows, "outgoing")
-        self.internet_output_rate = {time_interval: 0 for time_interval in range(0, internet_output_relative_duration + self.sampling_rate, self.sampling_rate)}
-        self.get_location_direction_rate(self.internet_output_flows, internet_output_first_pkt_time, self.internet_output_rate, "outgoing")
-        local_input_first_pkt_time, local_input_relative_duration = self.get_duration_and_first_pkt_time(
-            self.local_input_flows, "incoming")
-        self.local_input_rate = {time_interval:0 for time_interval in range(0, local_input_relative_duration + self.sampling_rate, self.sampling_rate)}
-        self.get_location_direction_rate(self.local_input_flows, local_input_first_pkt_time, self.local_input_rate, "incoming")
-        local_output_first_pkt_time, local_output_relative_duration = self.get_duration_and_first_pkt_time(
-            self.local_output_flows, "outgoing")
-        self.local_output_rate = {time_interval: 0 for time_interval in range(0, local_output_relative_duration + self.sampling_rate, self.sampling_rate)}
-        self.get_location_direction_rate(self.local_output_flows, local_output_first_pkt_time, self.local_output_rate, "outgoing")
+        """Function sets the relative duration of location and direction of traffic"""
+
+        def extract_features(first_pkt_time, rel_duration, location_direction):
+            if location_direction == 'internet_inputs':
+                self.internet_input_rate = {time_interval: 0 for time_interval in
+                                            range(0, rel_duration + self.sampling_rate, self.sampling_rate)}
+                self.internet_input_pkt_rate = {time_interval: 0 for time_interval in
+                                                range(0, rel_duration + self.sampling_rate, self.sampling_rate)}
+                self.get_location_direction_rate(self.internet_input_flows, first_pkt_time, self.internet_input_rate,
+                                                 self.internet_input_pkt_rate, "incoming")
+            elif location_direction == 'internet_outputs':
+                self.internet_output_rate = {time_interval: 0 for time_interval in
+                                             range(0, rel_duration + self.sampling_rate, self.sampling_rate)}
+                self.internet_output_pkt_rate = {time_interval: 0 for time_interval in
+                                                 range(0, rel_duration + self.sampling_rate, self.sampling_rate)}
+                self.get_location_direction_rate(self.internet_output_flows, first_pkt_time, self.internet_output_rate,
+                                                 self.internet_output_pkt_rate, 'outgoing')
+            elif location_direction == "local_inputs":
+                self.local_input_rate = {time_interval: 0 for time_interval in
+                                         range(0, rel_duration + self.sampling_rate, self.sampling_rate)}
+                self.local_input_pkt_rate = {time_interval: 0 for time_interval in
+                                             range(0, rel_duration + self.sampling_rate, self.sampling_rate)}
+                self.get_location_direction_rate(self.local_input_flows, first_pkt_time, self.local_input_rate,
+                                                 self.local_input_pkt_rate, "incoming")
+                assert set(self.local_input_rate.keys()) == set(self.local_input_pkt_rate.keys())
+            elif location_direction == 'local_outputs':
+                self.local_output_rate = {time_interval: 0 for time_interval in
+                                          range(0, rel_duration + self.sampling_rate, self.sampling_rate)}
+                self.local_output_pkt_rate = {time_interval: 0 for time_interval in
+                                              range(0, rel_duration + self.sampling_rate, self.sampling_rate)}
+                self.get_location_direction_rate(self.local_output_flows, first_pkt_time, self.local_output_rate,
+                                                 self.local_output_pkt_rate, 'outgoing')
+
+        if self.internet_input_rate is not None:
+            self.internet_input_rate = {time_interval: 0 for time_interval in range(0, self.internet_input_duration + self.sampling_rate, self.sampling_rate)}
+            self.internet_input_pkt_rate = {time_interval: 0 for time_interval in range(0, self.internet_input_duration + self.sampling_rate, self.sampling_rate)}
+            extract_features(self.internet_input_first_pkt, self.internet_input_duration, 'internet_inputs')
+            self.internet_output_rate = {time_interval: 0 for time_interval in range(0, self.internet_output_duration + self.sampling_rate, self.sampling_rate)}
+            self.internet_output_pkt_rate = {time_interval: 0 for time_interval in range(0, self.internet_output_duration + self.sampling_rate, self.sampling_rate)}
+            extract_features(self.internet_output_first_pkt, self.internet_output_duration, 'internet_outputs')
+            self.local_input_rate = {time_interval: 0 for time_interval in range(0, self.local_input_duration + self.sampling_rate, self.sampling_rate)}
+            self.local_input_pkt_rate = {time_interval: 0 for time_interval in range(0, self.local_input_duration + self.sampling_rate, self.sampling_rate)}
+            extract_features(self.local_input_first_pkt, self.local_input_duration, 'local_inputs')
+            self.local_output_rate = {time_interval: 0 for time_interval in range(0, self.local_output_duration + self.sampling_rate, self.sampling_rate)}
+            self.local_output_pkt_rate = {time_interval: 0 for time_interval in range(0, self.local_output_duration + self.sampling_rate, self.sampling_rate)}
+            extract_features(self.local_output_first_pkt, self.local_output_duration, 'local_outputs')
+            # print('internet_outputs', self.internet_output_rate.items())
+            print('new sampling rate data structures set', self.sampling_rate)
+
+        else:
+            internet_input_first_pkt_time, internet_input_relative_duration = self.get_duration_and_first_pkt_time(self.internet_input_flows, "incoming")
+            extract_features(internet_input_first_pkt_time,internet_input_relative_duration, "internet_inputs")
+            internet_output_first_pkt_time, internet_output_relative_duration = self.get_duration_and_first_pkt_time(self.internet_output_flows, "outgoing")
+            # self.internet_output_rate = {time_interval: 0 for time_interval in range(0, internet_output_relative_duration + self.sampling_rate, self.sampling_rate)}
+            extract_features(internet_output_first_pkt_time, internet_output_relative_duration, 'internet_outputs')
+            # self.get_location_direction_rate(self.internet_output_flows, internet_output_first_pkt_time, self.internet_output_rate, "outgoing")
+            local_input_first_pkt_time, local_input_relative_duration = self.get_duration_and_first_pkt_time(self.local_input_flows, "incoming")
+            extract_features(local_input_first_pkt_time, local_input_relative_duration, 'local_inputs')
+            # self.local_input_rate = {time_interval:0 for time_interval in range(0, local_input_relative_duration + self.sampling_rate, self.sampling_rate)}
+            # self.get_location_direction_rate(self.local_input_flows, local_input_first_pkt_time, self.local_input_rate, "incoming")
+            local_output_first_pkt_time, local_output_relative_duration = self.get_duration_and_first_pkt_time(self.local_output_flows, "outgoing")
+            extract_features(local_output_first_pkt_time, local_output_relative_duration, 'local_outputs')
+            # self.local_output_rate = {time_interval: 0 for time_interval in range(0, local_output_relative_duration + self.sampling_rate, self.sampling_rate)}
+            # self.get_location_direction_rate(self.local_output_flows, local_output_first_pkt_time, self.local_output_rate, "outgoing")
+            self.internet_input_duration, self.internet_input_first_pkt = internet_input_relative_duration, internet_input_first_pkt_time
+            self.internet_output_duration, self.internet_output_first_pkt = internet_output_relative_duration , internet_output_first_pkt_time
+            self.local_input_duration, self.local_input_first_pkt = local_input_relative_duration, local_input_first_pkt_time
+            self.local_output_duration, self.local_output_first_pkt = local_output_relative_duration, local_output_first_pkt_time
+            print('data structure set', self.sampling_rate)
+
 
     def get_duration_and_first_pkt_time(self, filter, direction):
         first_pkt_time = None
@@ -433,7 +494,6 @@ class DeviceProfile:
                 first_pkt_time = first_pkt_time if first_pkt_time < first_flow_pkt_time else first_flow_pkt_time
                 last_pkt_time = last_pkt_time if last_pkt_time > last_flow_pkt_time else last_flow_pkt_time
         return first_pkt_time, int(last_pkt_time-first_pkt_time)
-
 
     def plot_pkt_size(self, tcp_flows, udp_flows):
         """
@@ -685,8 +745,6 @@ class DeviceProfile:
         self.device_activity = {key: 0 for key in range(0, int(duration) +self.sampling_rate, self.sampling_rate)}
         self.get_device_traffic_rate(first_pkt_time)
 
-
-
     def get_device_traffic_rate(self, first_pkt_time):
 
         for flow_direction in self.flows:
@@ -786,7 +844,6 @@ class DeviceProfile:
     def create_traffic_volume_features(self, traffic_rate_type, w_window):
         """Fuction transforms device_activity/flow_direction_rate dictionary from s-second vectors to w-second windows to get extract mean
         standard deviation features in each window"""
-
         if traffic_rate_type == "bidirectional":
             device_rate_dict = self.device_activity
         elif traffic_rate_type == "input":
@@ -795,36 +852,49 @@ class DeviceProfile:
             device_rate_dict = self.flow_direction_rate['outgoing']
         elif traffic_rate_type == "internet_inputs":
             device_rate_dict = self.internet_input_rate
+            pkt_rate_dict = self.internet_input_pkt_rate
         elif traffic_rate_type == "internet_outputs":
             device_rate_dict = self.internet_output_rate
+            pkt_rate_dict = self.internet_output_pkt_rate
         elif traffic_rate_type == "local_inputs":
             device_rate_dict = self.local_input_rate
+            pkt_rate_dict = self.local_input_pkt_rate
         elif traffic_rate_type == "local_outputs":
             device_rate_dict = self.local_output_rate
+            pkt_rate_dict = self.local_output_pkt_rate
+
+        def compute_features(attribute_dict):
+            attribute_dict['mean'] = statistics.mean(attribute_dict['volume'])
+            attribute_dict['std'] = statistics.stdev(attribute_dict['volume'])
 
         extracted_features = {}
+        attributes = ['byte_count', 'pkt_count']
         features = ['volume', 'mean', 'std']
         duration = list(device_rate_dict.keys())[-1]
+        assert set(device_rate_dict.keys()) == set(pkt_rate_dict.keys())
         # w_window = w_window[0] if w_window else 500
-
-        #Initialise feature dictionary and fill values for new w-second window. reference section 5.1.3 https://arxiv.org/pdf/1708.05044.pdf
+        # Initialise feature dictionary and fill values for new w-second window. reference section 5.1.3 https://arxiv.org/pdf/1708.05044.pdf
         for interval in range(0, duration + 1, w_window):
-            extracted_features[interval] = {feature: [] if feature == 'volume' else None for feature in features}
+            extracted_features[interval] = {attr: {feature: [] if feature == 'volume' else None for feature in features} for attr in attributes}
         step = w_window
         for time_window in device_rate_dict:
             if traffic_rate_type != 'incoming' or traffic_rate_type != "outgoing":
                 # structure of flow_direction_rate dictionary (its values are tuples) is different to device_activity
                 byte_count = device_rate_dict[time_window]
+                pkt_count = pkt_rate_dict[time_window]
             else:
                 # time_window value = (pkt_count, byte_count) -> we get byte_count
                 byte_count = device_rate_dict[time_window][1]
             try:
                 if time_window < w_window:
-                        extracted_features[w_window]['volume'].append(byte_count)
+                    extracted_features[w_window]['byte_count']['volume'].append(byte_count)
+                    extracted_features[w_window]['pkt_count']['volume'].append(pkt_count)
                 elif time_window == w_window:
-                    extracted_features[w_window]['volume'].append(byte_count)
-                    extracted_features[w_window]['mean'] = statistics.mean(extracted_features[w_window]['volume'])
-                    extracted_features[w_window]['std'] = statistics.stdev(extracted_features[w_window]['volume'])
+                    extracted_features[w_window]['byte_count']['volume'].append(byte_count)
+                    compute_features(extracted_features[w_window]['byte_count'])
+                    compute_features(extracted_features[w_window]['pkt_count'])
+                    # extracted_features[w_window]['mean'] = statistics.mean(extracted_features[w_window]['volume'])
+                    # extracted_features[w_window]['std'] = statistics.stdev(extracted_features[w_window]['volume'])
                     w_window += step
             except KeyError as e:
                 if w_window > duration:
@@ -835,16 +905,15 @@ class DeviceProfile:
                     print('sampling rate last key', duration)
         return extracted_features
 
-    def get_mean_and_std(self, rate_vectors):
-        """Takes in a flow rate vector dict and returns the mean and std for a cluster plot"""
+    def get_mean_and_std(self, rate_vectors, rate_type):
+        """Takes in a flow rate vector dict and returns the mean and std"""
         mean = []
         std = []
         for interval in rate_vectors:
-            mean_i = rate_vectors[interval]['mean']
-            std_i = rate_vectors[interval]['std']
+            mean_i = rate_vectors[interval][rate_type]['mean']
+            std_i = rate_vectors[interval][rate_type]['std']
             if mean_i is None:
-               # print('mean is None')
-               mean_i = 0
+                mean_i = 0
             if std_i is None:
                 # print('std is None')
                 std_i = 0
