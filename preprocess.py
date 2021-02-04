@@ -130,21 +130,42 @@ class ModelDevice:
 
     def process_all_traffic(self):
         if self.saved_features is False:
-            i = 0
+            i = 1
             for device_obj in self.device_traffic:
-                if i < math.inf:
+                if i < 2:
                     self.get_time_scale_features(device_obj)
                 else:
                     break
                 i += 1
         print('finished feature extraction')
         # self.save_device_traffic_attributes()
-        self.plot_attribute_cluster("first", self.sampling_rates[0])
-        self.plot_attribute_cluster("second",self.sampling_rates[0])
-        self.compare_sampling_window(self.first_time_scale_features,'internet', self.time_scales[0])
-        self.compare_sampling_window(self.first_time_scale_features, 'local', self.time_scales[0])
-        self.compare_sampling_window(self.second_time_scale_features, 'internet', self.time_scales[1])
-        self.compare_sampling_window(self.second_time_scale_features, 'local', self.time_scales[1])
+        self.plot_graphs()
+
+    def plot_graphs(self):
+        print("plotting graphs")
+        # self.plot_attribute_cluster("first", self.sampling_rates[0])
+        # self.plot_attribute_cluster("second", self.sampling_rates[0])
+        # self.compare_sampling_window(self.first_time_scale_features, 'internet', self.time_scales[0])
+        # self.compare_sampling_window(self.first_time_scale_features, 'local', self.time_scales[0])
+        # self.compare_sampling_window(self.second_time_scale_features, 'internet', self.time_scales[1])
+        # self.compare_sampling_window(self.second_time_scale_features, 'local', self.time_scales[1])
+        locations = ['local', 'internet']
+        directions = ['inputs', 'outputs']
+        for location in locations:
+            self.plot_feature_correlation(self.first_time_scale_features, location, self.sampling_rates[0], directions[0], self.time_scales[0])
+            self.plot_feature_correlation(self.first_time_scale_features, location, self.sampling_rates[0],
+                                          directions[1], self.time_scales[0])
+            self.plot_feature_correlation(self.first_time_scale_features, location, self.sampling_rates[1], directions[0], self.time_scales[0])
+            self.plot_feature_correlation(self.first_time_scale_features, location, self.sampling_rates[1],
+                                          directions[1], self.time_scales[0])
+            self.plot_feature_correlation(self.second_time_scale_features, location, self.sampling_rates[0],
+                                          directions[0], self.time_scales[1])
+            self.plot_feature_correlation(self.second_time_scale_features, location, self.sampling_rates[0],
+                                          directions[1], self.time_scales[1])
+            self.plot_feature_correlation(self.second_time_scale_features, location, self.sampling_rates[1],
+                                          directions[0], self.time_scales[1])
+            self.plot_feature_correlation(self.second_time_scale_features, location, self.sampling_rates[1],
+                                          directions[1], self.time_scales[1])
 
     def compare_sampling_window(self, time_scale, location, w_window):
         """time_scale = time_scale_features"""
@@ -156,13 +177,36 @@ class ModelDevice:
         ax.set_ylabel("standard deviation (bytes)")
         sample_rate_1 = time_scale[self.sampling_rates[0]]
         sample_rate_2 = time_scale[self.sampling_rates[1]]
-        
         ax.scatter(sample_rate_1[location+'_inputs_mean_bytes'], sample_rate_1[location+'_inputs_std_bytes'], label= str(self.sampling_rates[0])+" "+location+' inputs', color='g', alpha=0.6)
         ax.scatter(sample_rate_2[location+'_inputs_mean_bytes'], sample_rate_2[location+'_inputs_std_bytes'], label= str(self.sampling_rates[1])+" "+location+' inputs', color='c', alpha=0.6)
         ax.scatter(sample_rate_1[location+'_outputs_mean_bytes'], sample_rate_1[location+'_outputs_std_bytes'], label= str(self.sampling_rates[0])+" "+location+' outputs', color='r', alpha=0.6)
         ax.scatter(sample_rate_2[location+'_outputs_mean_bytes'], sample_rate_2[location+'_outputs_std_bytes'], label= str(self.sampling_rates[1])+" "+location+' outputs', color='b', alpha=0.6)
         plt.legend(loc='best')
         plt.savefig(str(self.save_plot_path / self.device_name) + name + ".png")
+        plt.show()
+
+    def plot_feature_correlation(self, time_scale_features, location, sampling_rate, direction, time_scale):
+        fig = plt.figure()
+        ax = fig.add_subplot(1,1,1)
+        name = str(time_scale) +" window" +" "+ str(sampling_rate) + " sampling rate"
+        ax.set_title(name)
+        ax.set_ylabel('Byte count (KB)')
+        ax.set_xlabel('Packet count')
+        save_path = self.save_plot_path / 'packet_size'
+        location_direction = ['local_inputs', 'local_outputs', 'internet_inputs', 'internet_outputs']
+        if save_path.is_dir() is False:
+            save_path.mkdir()
+            for x in location_direction:
+                save_folder = save_path / x
+                if save_folder.is_dir() is False:
+                    save_folder.mkdir()
+
+        def convert_to_KB(input_data):
+            return [x / 1000 for x in input_data]
+
+        ax.scatter(convert_to_KB(time_scale_features[sampling_rate][location+'_'+direction+'_mean_bytes']),
+                   convert_to_KB(time_scale_features[sampling_rate][location+'_'+direction+'_std_bytes']))
+        plt.savefig(str(self.save_plot_path/'packet_size'/ (location + '_'+ direction) / (name + '.png')))
         plt.show()
 
     def plot_attribute_cluster(self, time_scale_dict, sampling_rate):
