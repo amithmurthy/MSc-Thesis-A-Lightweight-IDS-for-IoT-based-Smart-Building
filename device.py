@@ -921,6 +921,13 @@ class DeviceProfile:
             std.append(std_i)
         return mean, std
 
+    def get_total_byte_count(self, feature_vectors, rate_type):
+        byte_count_total = []
+        for time_window in feature_vectors:
+            byte_count_total.append(sum(feature_vectors[time_window][rate_type]['volume']))
+        print(byte_count_total)
+        return byte_count_total
+
     def cluster_device_signature_features(self):
         internet_input_vectors = self.create_traffic_volume_features("internet_inputs")
         internet_output_vectors = self.create_traffic_volume_features("internet_outputs")

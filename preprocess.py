@@ -37,7 +37,9 @@ class ModelDevice:
         self.features = ['local_inputs_mean_bytes', 'local_inputs_std_bytes', 'local_outputs_mean_bytes', 'local_outputs_std_bytes',
                          'internet_inputs_mean_bytes', 'internet_inputs_std_bytes', 'internet_outputs_mean_bytes', 'internet_outputs_std_bytes',
                          'local_inputs_mean_pkts', 'local_inputs_std_pkts', 'local_outputs_mean_pkts', 'local_outputs_std_pkts', 'internet_inputs_mean_pkts',
-                         'internet_inputs_std_pkts', 'internet_outputs_mean_pkts', 'internet_outputs_std_pkts']
+                         'internet_inputs_std_pkts', 'internet_outputs_mean_pkts', 'internet_outputs_std_pkts', 'local_inputs_bytes_total', 'local_outputs_bytes_total',
+                         'internet_inputs_bytes_total', 'internet_outputs_bytes_total', 'local_inputs_pkts_total', 'local_outputs_pkts_total', 'internet_inputs_pkts_total',
+                         'internet_outputs_pkts_total']
         self.sampling_rates = kwargs['sampling_rate'] if 'sampling_rate' in kwargs else [5]
         self.first_time_scale_features = {sampling_rate: {feature: [] for feature in self.features} for sampling_rate in self.sampling_rates}
         self.second_time_scale_features = deepcopy(self.first_time_scale_features)
@@ -90,6 +92,13 @@ class ModelDevice:
             internet_output_mean, internet_output_std = device.get_mean_and_std(time_scale_dict['internet_outputs'],count_type)
             return [local_input_mean, local_input_std, local_output_mean, local_output_std, internet_input_mean, internet_input_std, internet_output_mean, internet_output_std]
 
+        def get_total_count(device_obj, time_scale_dict, count_type):
+            local_input = device_obj.get_total_byte_count(time_scale_dict['local_inputs'], count_type)
+            local_output = device_obj.get_total_byte_count(time_scale_dict['local_outputs'], count_type)
+            internet_input = device_obj.get_total_byte_count(time_scale_dict['internet_inputs'], count_type)
+            internet_output = device_obj.get_total_byte_count(time_scale_dict['internet_outputs'], count_type)
+            return [local_input, local_output, internet_input, internet_output]
+
         def get_features(time_scale_dict):
             # local_input_mean_bytes, local_input_std_bytes = device_obj.get_mean_and_std(time_scale_dict['local_inputs'], 'byte_count')
             # local_output_mean_bytes, local_output_std_bytes = device_obj.get_mean_and_std(time_scale_dict['local_outputs'], 'byte_count')
@@ -102,7 +111,9 @@ class ModelDevice:
             if 'pkt_count' in self.feature_map:
                 byte_features = get_count_type_features(device_obj, time_scale_dict, 'byte_count')
                 pkt_features = get_count_type_features(device_obj, time_scale_dict, 'pkt_count')
-                return [byte_features, pkt_features]
+                total_bytes = get_total_count(device_obj, time_scale_dict, 'byte_count')
+                total_pkts = get_total_count(device_obj, time_scale_dict, 'pkt_count')
+                return [byte_features, pkt_features, total_bytes, total_pkts]
             else:
                 print('only byte_count extracted')
                 byte_features = get_count_type_features(device_obj, time_scale_dict, 'byte_count')
@@ -138,8 +149,8 @@ class ModelDevice:
                     break
                 i += 1
         print('finished feature extraction')
-        # self.save_device_traffic_attributes()
-        self.plot_graphs()
+        self.save_device_traffic_attributes()
+        # self.plot_graphs()
 
     def plot_graphs(self):
         print("plotting graphs")
@@ -354,6 +365,8 @@ class ModelDevice:
         else:
             for location in location_models:
                 for file in location_models[location]:
+                    if file == '50s.csv' or file == '100s.csv':
+                        continue
                     self.train_time_scale_model(location,file)
 
     def train_time_scale_model(self, location, file):
@@ -476,7 +489,7 @@ class ModelDevice:
 
     def inspect_traffic(self, time_scale, location):
         """Cluster boundary for time_scale model are the arguments"""
-        print("inspecting", time_scale)
+        print("inspecting", location, time_scale)
         benign_data = self.device_folder / ("benign_"+location) / (str(time_scale) + '.csv')
         attack_file = self.device_folder / ("attack_"+location) / (str(time_scale) + '.csv')
 
@@ -494,7 +507,8 @@ class ModelDevice:
 
         results = benign_cluster_model.predict(inspect_data)
         print("predicted attack data")
-        cluster_points_distances = self.find_cluster_boundary(inspect_data, benign_cluster_model.cluster_centers_, results)
+        # cluster_points_distances = self.find_cluster_boundary(inspect_data, benign_cluster_model.cluster_centers_, results)
+        cluster_points_distances = self.find_cluster_boundary(inspect_data, self.benign_model[location][time_scale]['benign_centroids'], results)
         cluster_map = pd.DataFrame()
         cluster_map['data_index'] = inspect_df.index.values
         cluster_map['cluster'] = results
@@ -508,10 +522,14 @@ class ModelDevice:
             # print(time_scale, 'distances',  cluster_distances[centroid])
             centroid_data_index = list(cluster_map[cluster_map.cluster == centroid].data_index.values)
             i = 0
+            if time_scale == '150s' or time_scale == '200s':
+                print(time_scale," boundary outlier detection")
             for instance in cluster_distances[centroid]:
-                if instance >= cluster_boundary[centroid]:
+                if instance > cluster_boundary[centroid]:
                     self.time_scale_anomalies[location][time_scale]['anomalies'].append(instance)
                     self.time_scale_anomalies[location][time_scale]['anomaly_index'].append(centroid_data_index[i])
+                elif instance == cluster_boundary[centroid]:
+                    print('equal to boundary')
                 i += 1
 
 
@@ -599,16 +617,20 @@ class ModelDevice:
                             tp += 1
                             tp_anomalies[location][ts].append((int(anomaly), self.attack_metadata[meta_data_keys[i]]['attack_type']))
                         i += 1
-        # for ts in tp_anomalies:
-        #     print(ts)
-        #     print(tp_anomalies[ts])
-        #     total = len(self.anomaly_timestamp[ts])
-        #     tp = len(tp_anomalies[ts])
-        #     print('len of identified', tp)
-        #     print('TP:',  tp / total)
-        #     print('FP:', (total - tp) / total)
-        # print(tp_anomalies)
-        # print(len(tp_anomalies))
+        for location in tp_anomalies:
+            print(location)
+            # print(tp_anomalies[ts])
+            for ts in tp_anomalies[location]:
+                if ts == '50s' or ts == '100s':
+                    continue
+                total = len(self.anomaly_timestamp[location][ts])
+                tp = len(tp_anomalies[location]['50s'])
+                print('len of identified', tp)
+                print('TP:',  tp / total)
+                print('FP:', (total - tp) / total)
+                print(tp_anomalies['internet'][ts])
+        # print()
+
 
     def link_annotations_and_output(self):
         pass

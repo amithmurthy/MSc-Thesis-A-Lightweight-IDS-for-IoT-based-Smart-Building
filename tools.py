@@ -161,12 +161,12 @@ def get_malicious_flows(folder_path):
 def get_device_cluster(device, location, time_scale):
     device_cluster = {
         'Amazon Echo': {'internet':{'50s':9, '100s':9}, 'local':{'50s':9,'100s':7}},
-        'Belkin wemo motion sensor': 5,
-        'Belkin Wemo switch': 5,
-        'Light Bulbs LiFX Smart Bulb': 5,
-        'Netatmo Welcom':6,
-        'Samsung SmartCam':6,
-        'TP-Link Smart plug':5
+        'Belkin wemo motion sensor': {'internet':{'50s':9,'100s':10}, 'local':{'50s':9,'100s':8}},
+        'Belkin Wemo switch': {'internet':{'50s':7,'100s':7}, 'local':{'50s':8,'100s':6}},
+        'Light Bulbs LiFX Smart Bulb': {'internet':{'50s':6,'100s':6, '150s':6, '200s':6}, 'local':{'50s':5,'100s':5, '150s':4, '200s':4}},
+        'Netatmo Welcom':{'internet':{'50s':6,'100s':6, '150s':6,'200s':6}, 'local':{'50s':5,'100s':5, '150s':5,'200s':5}},
+        'Samsung SmartCam':{'internet':{'50s':5,'100s':6}, 'local':{'50s':7,'100s':7}},
+        'TP-Link Smart plug':{'internet':{'50s':8,'100s':7}, 'local':{'50s':6,'100s':7}}
     }
 
     return device_cluster[device][location][time_scale]
@@ -181,7 +181,7 @@ def get_device_feature(device):
         'Light Bulbs LiFX Smart Bulb': default_features,
         'Netatmo Welcom': default_features,
         'Samsung SmartCam': default_features,
-        'TP-Link Smart  plug': default_features
+        'TP-Link Smart plug': default_features
     }
     return device_feature_mapper[device]
 

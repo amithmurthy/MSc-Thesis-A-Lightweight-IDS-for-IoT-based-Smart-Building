@@ -27,6 +27,9 @@ iot = ["Smart Things", "Amazon Echo", "Netatmo Welcom", "TP-Link Day Night Cloud
 
 infected_devices = ["Belkin wemo motion sensor", "Belkin Wemo switch", "Samsung SmartCam", "Light Bulbs LiFX Smart Bulb", "TP-Link Smart plug", "Netatmo Welcom",
                     "Amazon Echo"]
+remaining = ["TP-Link Smart plug", "Netatmo Welcom",
+                    "Amazon Echo"]
+
 device_filter = ["Netatmo Welcom"]
 device_events = {
     "tplink-plug": {
@@ -154,12 +157,12 @@ def preprocess_device_traffic(device_filter, data_type):
             # device_obj.set_location_direction_rates()
 
     # print('Number of device instances in dataset')
-    ModelDevice(model_function="preprocess", device_name=device_filter, device_traffic=device_traffic, time_scales=[50, 100], data_type=data_type, sampling_rate=[5, 10])
+    ModelDevice(model_function="preprocess", device_name=device_filter, device_traffic=device_traffic, time_scales=[120, 150], data_type=data_type, sampling_rate=[30])
 
 def train_clustering_model(device):
     """Train and test device clustering model"""
     # ModelDevice(model_function='preprocess', saved_features=True, time_scales=[200,300], device_name=device)
-    # ModelDevice(model_function="train", device_name=device)
+    ModelDevice(model_function="train", device_name=device)
     ModelDevice(model_function="anomaly_detection", device_name=device)
     # ModelDevice(model_function="validate", device_name=device)
 
@@ -292,14 +295,14 @@ def main():
     processed_attack_traffic = r"C:\Users\amith\Documents\Uni\Masters\processed-traffic\Attack"
     processed_benign_traffic = r"C:\Users\amith\Documents\Uni\Masters\processed-traffic\Benign"
     processed_benign_2016 = r"C:\Users\amith\Documents\Uni\Masters\processed-traffic\2016"
-
-    for device in infected_devices:
-        # if device == "Amazon Echo":
-        #     continue
-        preprocess_device_traffic(device, 'benign')
-        preprocess_device_traffic(device, 'attack')
-    # train_clustering_model("Amazon Echo")
-    # train_clustering_model("Samsung SmartCam")
+    # preprocess_device_traffic("Amazon Echo", 'benign')
+    # for device in remaining:
+    #     # if device == "Amazon Echo":
+    #     #     continue
+    #     preprocess_device_traffic(device, 'benign')
+    preprocess_device_traffic("TP-Link Smart plug", 'benign')
+    #     train_clustering_model(device)
+    # train_clustering_model("Netatmo Welcom")
     # extract_timestamps(dataset1, processed_benign_2016)
     # modify_timestamp(processed_benign_2016)
     # analyse_dataset(attack_dataset, processed_attack_traffic, malicious_pkts, benign_pkts)
