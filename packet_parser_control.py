@@ -25,11 +25,8 @@ iot = ["Smart Things", "Amazon Echo", "Netatmo Welcom", "TP-Link Day Night Cloud
             "HP Printer", "Samsung Galaxy Tab", "Nest Dropcam", "TPLink Router Bridge LAN (Gateway)"]
 
 
-infected_devices = ["Belkin wemo motion sensor", "Belkin Wemo switch", "Samsung SmartCam", "Light Bulbs LiFX Smart Bulb", "TP-Link Smart plug", "Netatmo Welcom",
+infected_devices = ["Belkin Wemo switch","Belkin wemo motion sensor", "Samsung SmartCam", "Light Bulbs LiFX Smart Bulb", "TP-Link Smart plug", "Netatmo Welcom",
                     "Amazon Echo"]
-remaining = ["TP-Link Smart plug", "Netatmo Welcom",
-                    "Amazon Echo"]
-
 device_filter = ["Netatmo Welcom"]
 device_events = {
     "tplink-plug": {
@@ -156,13 +153,13 @@ def preprocess_device_traffic(device_filter, data_type):
             device_obj.sort_flow_location(network_obj)
             # device_obj.set_location_direction_rates()
 
-    # print('Number of device instances in dataset')
+    print('Number of device instances in dataset', len(device_traffic))
     ModelDevice(model_function="preprocess", device_name=device_filter, device_traffic=device_traffic, time_scales=[120, 150], data_type=data_type, sampling_rate=[30])
 
 def train_clustering_model(device):
     """Train and test device clustering model"""
     # ModelDevice(model_function='preprocess', saved_features=True, time_scales=[200,300], device_name=device)
-    ModelDevice(model_function="train", device_name=device)
+    # ModelDevice(model_function="train", device_name=device)
     ModelDevice(model_function="anomaly_detection", device_name=device)
     # ModelDevice(model_function="validate", device_name=device)
 
@@ -292,17 +289,20 @@ def main():
     global processed_attack_traffic
     global processed_benign_traffic
     global processed_benign_2016
-    processed_attack_traffic = r"C:\Users\amith\Documents\Uni\Masters\processed-traffic\Attack"
-    processed_benign_traffic = r"C:\Users\amith\Documents\Uni\Masters\processed-traffic\Benign"
+    processed_attack_traffic = r"C:\Users\amithmurthy\Downloads\processed-traffic\Attack"
+    processed_benign_traffic = r"C:\Users\amithmurthy\Downloads\processed-traffic\Benign"
     processed_benign_2016 = r"C:\Users\amith\Documents\Uni\Masters\processed-traffic\2016"
-    # preprocess_device_traffic("Amazon Echo", 'benign')
-    # for device in remaining:
-    #     # if device == "Amazon Echo":
-    #     #     continue
-    #     preprocess_device_traffic(device, 'benign')
-    preprocess_device_traffic("TP-Link Smart plug", 'benign')
-    #     train_clustering_model(device)
-    # train_clustering_model("Netatmo Welcom")
+
+    preprocess_device_traffic("Amazon Echo", 'benign')
+
+    # for device in infected_devices:
+        # if device == "Amazon Echo":
+        #     continue
+        # preprocess_device_traffic(device, 'benign')
+        # preprocess_device_traffic(device, 'attack')
+    # preprocess_device_traffic("TP-Link Smart plug", 'benign')
+    # train_clustering_model("Amazon Echo")
+    # train_clustering_model("Samsung SmartCam")
     # extract_timestamps(dataset1, processed_benign_2016)
     # modify_timestamp(processed_benign_2016)
     # analyse_dataset(attack_dataset, processed_attack_traffic, malicious_pkts, benign_pkts)
@@ -354,16 +354,25 @@ def main():
     # device_signature_plots(device_objs)
 
 if __name__ == "__main__":
-    main()
+
 
     # for device in infected_devices:
-    #     path = r"C:\Users\amith\Documents\Uni\Masters\Graphs\Machine Learning"
+    #     path = r"C:\Users\amithmurthy\Documents\Uni\Masters\device_attributes"
     #     folder = Path(path) / device
     #     if folder.is_dir():
     #         continue
     #     else:
     #         folder.mkdir()
+    #     folder_names = ['normalised', 'features', 'kmeans-model']
+    #     new_folders = folder
+    #     for name in folder_names:
+    #         new_folders = new_folders / name
+    #         if new_folders.is_dir() is False:
+    #             folder.mkdir()
+    #         else:
+    #             continue
 
+    main()
 
     # thread1 = threading.Thread(target= save_traffic(pcap_file, file_path, devices))
     # thread2 = threading.Thread(target=create_device_plots(devices,malicious_pkts, benign_pkts))

@@ -925,7 +925,6 @@ class DeviceProfile:
         byte_count_total = []
         for time_window in feature_vectors:
             byte_count_total.append(sum(feature_vectors[time_window][rate_type]['volume']))
-        print(byte_count_total)
         return byte_count_total
 
     def cluster_device_signature_features(self):
