@@ -160,30 +160,17 @@ def get_malicious_flows(folder_path):
 
 def get_device_cluster(device, location, time_scale):
     device_cluster = {
-        'Amazon Echo': {'internet':{'50s':9, '100s':9}, 'local':{'50s':9,'100s':7}},
-        'Belkin wemo motion sensor': {'internet':{'50s':9,'100s':10}, 'local':{'50s':9,'100s':8}},
-        'Belkin Wemo switch': {'internet':{'50s':7,'100s':7}, 'local':{'50s':8,'100s':6}},
-        'Light Bulbs LiFX Smart Bulb': {'internet':{'50s':6,'100s':6, '150s':6, '200s':6}, 'local':{'50s':5,'100s':5, '150s':4, '200s':4}},
-        'Netatmo Welcom':{'internet':{'50s':6,'100s':6, '150s':6,'200s':6}, 'local':{'50s':5,'100s':5, '150s':5,'200s':5}},
-        'Samsung SmartCam':{'internet':{'50s':5,'100s':6}, 'local':{'50s':7,'100s':7}},
-        'TP-Link Smart plug':{'internet':{'50s':8,'100s':7}, 'local':{'50s':6,'100s':7}}
+        'Amazon Echo': {'internet':{'50s':9, '100s':9, '180s':7}, 'local':{'50s':9,'100s':7, '180s':10}},
+        'Belkin wemo motion sensor': {'internet':{'50s':9,'100s':10,'180s':11}, 'local':{'50s':9,'100s':8, '180s':7}},
+        'Belkin Wemo switch': {'internet':{'50s':7,'100s':7, '180s':6}, 'local':{'50s':8,'100s':6, '180s':6}},
+        'Light Bulbs LiFX Smart Bulb': {'internet':{'50s':6,'100s':6, '150s':6,'180s':9, '200s':6}, 'local':{'50s':5,'100s':5, '150s':4, '180s':5,'200s':4}},
+        'Netatmo Welcom':{'internet':{'50s':6,'100s':6, '150s':6,'180s':6, '200s':6}, 'local':{'50s':5,'100s':5, '150s':5,'180s':7, '200s':5}},
+        'Samsung SmartCam':{'internet':{'50s':5,'100s':6, '180s':6}, 'local':{'50s':7,'100s':7,'180s':6}},
+        'TP-Link Smart plug':{'internet':{'50s':8,'100s':7, '180s':7}, 'local':{'50s':6,'100s':7, '180s':7}}
     }
 
     return device_cluster[device][location][time_scale]
 
-def get_device_feature(device):
-    """From experimentation which features are effective"""
-    default_features = ['byte_count', 'pkt_count']
-    device_feature_mapper = {
-        'Amazon Echo': default_features,
-        'Belkin wemo motion sensor': default_features,
-        'Belkin Wemo switch': default_features,
-        'Light Bulbs LiFX Smart Bulb': default_features,
-        'Netatmo Welcom': default_features,
-        'Samsung SmartCam': default_features,
-        'TP-Link Smart plug': default_features
-    }
-    return device_feature_mapper[device]
 
 def get_ax():
     fig = plt.figure()
@@ -216,6 +203,19 @@ def logged(func):
         except Exception as e:
             logging.exception(e)
     return wrapper
+
+def get_sampling_rate(*time_scale):
+    """Return the sampling rate/s for a time scale/window"""
+    time_scale_sampling_rate = {
+        60: [60],
+        120: [10,60],
+        240: [10, 60],
+    }
+    if time_scale:
+        return time_scale_sampling_rate[time_scale[0]]
+    else:
+        return time_scale_sampling_rate
+
 
 def log(type, pkt_ordinal, pkt_time, *len):
     if type == "pkt_len":

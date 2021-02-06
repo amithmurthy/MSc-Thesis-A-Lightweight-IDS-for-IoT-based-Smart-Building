@@ -156,8 +156,8 @@ def preprocess_device_traffic(device_filter, data_type):
             device_obj.sort_flow_location(network_obj)
             # device_obj.set_location_direction_rates()
 
-    # print('Number of device instances in dataset')
-    ModelDevice(model_function="preprocess", device_name=device_filter, device_traffic=device_traffic, time_scales=[120, 150], data_type=data_type, sampling_rate=[30])
+    print('Number of device instances in dataset', len(device_traffic))
+    ModelDevice(model_function="preprocess", device_name=device_filter, device_traffic=device_traffic, time_scales=[60,120,240], data_type=data_type)
 
 def train_clustering_model(device):
     """Train and test device clustering model"""
@@ -295,12 +295,12 @@ def main():
     processed_attack_traffic = r"C:\Users\amith\Documents\Uni\Masters\processed-traffic\Attack"
     processed_benign_traffic = r"C:\Users\amith\Documents\Uni\Masters\processed-traffic\Benign"
     processed_benign_2016 = r"C:\Users\amith\Documents\Uni\Masters\processed-traffic\2016"
-    # preprocess_device_traffic("Amazon Echo", 'benign')
-    # for device in remaining:
+    preprocess_device_traffic("Amazon Echo", 'benign')
+    # for device in infected_devices:
     #     # if device == "Amazon Echo":
     #     #     continue
     #     preprocess_device_traffic(device, 'benign')
-    preprocess_device_traffic("TP-Link Smart plug", 'benign')
+    #     preprocess_device_traffic(device, 'attack')
     #     train_clustering_model(device)
     # train_clustering_model("Netatmo Welcom")
     # extract_timestamps(dataset1, processed_benign_2016)

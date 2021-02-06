@@ -841,6 +841,22 @@ class DeviceProfile:
         plt.savefig(save_folder + location + "commandjitter" + str(iteration) + ".png")
         print("flow jitter comparison plotted")
 
+    def get_rate_type_data_struct(self, traffic_rate_type):
+        if traffic_rate_type == "bidirectional":
+            return self.device_activity
+        elif traffic_rate_type == "input":
+            return self.flow_direction_rate['incoming']
+        elif traffic_rate_type == "output":
+            return self.flow_direction_rate['outgoing']
+        elif traffic_rate_type == "internet_inputs":
+            return self.internet_input_rate, self.internet_input_pkt_rate
+        elif traffic_rate_type == "internet_outputs":
+            return self.internet_output_rate, self.internet_output_pkt_rate
+        elif traffic_rate_type == "local_inputs":
+            return self.local_input_rate, self.local_input_pkt_rate
+        elif traffic_rate_type == "local_outputs":
+            return self.local_output_rate, self.local_output_pkt_rate
+
     def create_traffic_volume_features(self, traffic_rate_type, w_window):
         """Fuction transforms device_activity/flow_direction_rate dictionary from s-second vectors to w-second windows to get extract mean
         standard deviation features in each window"""
@@ -871,14 +887,16 @@ class DeviceProfile:
         attributes = ['byte_count', 'pkt_count']
         features = ['volume', 'mean', 'std']
         duration = list(device_rate_dict.keys())[-1]
-        assert set(device_rate_dict.keys()) == set(pkt_rate_dict.keys())
+        if pkt_rate_dict is not None:
+            assert set(device_rate_dict.keys()) == set(pkt_rate_dict.keys())
         # w_window = w_window[0] if w_window else 500
         # Initialise feature dictionary and fill values for new w-second window. reference section 5.1.3 https://arxiv.org/pdf/1708.05044.pdf
         for interval in range(0, duration + 1, w_window):
             extracted_features[interval] = {attr: {feature: [] if feature == 'volume' else None for feature in features} for attr in attributes}
         step = w_window
+        test = 0
         for time_window in device_rate_dict:
-            if traffic_rate_type != 'incoming' or traffic_rate_type != "outgoing":
+            if traffic_rate_type != 'incoming' or traffic_rate_type != "outgoing" or traffic_rate_type != 'bidirectional':
                 # structure of flow_direction_rate dictionary (its values are tuples) is different to device_activity
                 byte_count = device_rate_dict[time_window]
                 pkt_count = pkt_rate_dict[time_window]
@@ -886,18 +904,18 @@ class DeviceProfile:
                 # time_window value = (pkt_count, byte_count) -> we get byte_count
                 byte_count = device_rate_dict[time_window][1]
             try:
-                if time_window < w_window:
-                    extracted_features[w_window]['byte_count']['volume'].append(byte_count)
-                    extracted_features[w_window]['pkt_count']['volume'].append(pkt_count)
-                elif time_window == w_window:
-                    extracted_features[w_window]['byte_count']['volume'].append(byte_count)
-                    compute_features(extracted_features[w_window]['byte_count'])
-                    compute_features(extracted_features[w_window]['pkt_count'])
-                    # extracted_features[w_window]['mean'] = statistics.mean(extracted_features[w_window]['volume'])
-                    # extracted_features[w_window]['std'] = statistics.stdev(extracted_features[w_window]['volume'])
-                    w_window += step
+                if time_window < (test + step):
+                    extracted_features[test]['byte_count']['volume'].append(byte_count)
+                    extracted_features[test]['pkt_count']['volume'].append(pkt_count)
+                elif time_window == (test + step):
+                    extracted_features[test]['byte_count']['volume'].append(byte_count)
+                    extracted_features[test]['pkt_count']['volume'].append(pkt_count)
+                    compute_features(extracted_features[test]['byte_count'])
+                    compute_features(extracted_features[test]['pkt_count'])
+                    test += step
             except KeyError as e:
-                if w_window > duration:
+                if test > duration:
+                    print('w_window greater than device traffic duration')
                     break
                 else:
                     print("w_window key error", e)
@@ -922,11 +940,28 @@ class DeviceProfile:
         return mean, std
 
     def get_total_byte_count(self, feature_vectors, rate_type):
-        byte_count_total = []
+        """Rate type is either byte_count or pkt count"""
+        count_total = []
         for time_window in feature_vectors:
-            byte_count_total.append(sum(feature_vectors[time_window][rate_type]['volume']))
-        print(byte_count_total)
-        return byte_count_total
+            count_total.append(sum(feature_vectors[time_window][rate_type]['volume']))
+        # print(byte_count_total)
+        return count_total
+
+
+    def merge_byte_pkt_count(self, traffic_rate_type, sliding_window):
+        """this function is for the first time scale (usually 1 min) feature extraction as only total byte and pkt count are required.
+        Sliding window and sampling rate should be the same i.e. 60 second sampling rate => 1 min total byte/pkt count"""
+        byte_rate, pkt_rate = self.get_rate_type_data_struct(traffic_rate_type)
+        sampling_rate = list(byte_rate.keys())[1] - list(byte_rate.keys())[0]
+        assert sampling_rate == sliding_window
+        # Check byte rate and pkt rate keys are same i.e. same sampling rate
+        assert set(byte_rate.keys()) == set(pkt_rate.keys())
+        total_count = {}
+        for time_window in byte_rate:
+            total_count[time_window] = {}
+            total_count[time_window]['byte_count'] = byte_rate[time_window]
+            total_count[time_window]['pkt_count'] = pkt_rate[time_window]
+        return total_count
 
     def cluster_device_signature_features(self):
         internet_input_vectors = self.create_traffic_volume_features("internet_inputs")
