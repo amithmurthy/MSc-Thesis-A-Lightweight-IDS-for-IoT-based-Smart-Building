@@ -162,8 +162,9 @@ def preprocess_device_traffic(device_filter, data_type):
 def train_clustering_model(device):
     """Train and test device clustering model"""
     # ModelDevice(model_function='preprocess', saved_features=True, time_scales=[200,300], device_name=device)
-    ModelDevice(model_function="train", device_name=device)
-    ModelDevice(model_function="anomaly_detection", device_name=device)
+    ModelDevice(model_function="train", device_name=device, train_type='find_k')
+    # ModelDevice(model_function='train', device_name=device)
+    # ModelDevice(model_function="anomaly_detection", device_name=device)
     # ModelDevice(model_function="validate", device_name=device)
 
 
@@ -263,12 +264,10 @@ def main():
     process_moniotr_file_path = r"C:\Users\amith\Documents\Uni\Masters\processed-traffic\moniotr"
     northeastern_dataset_uk = r"D:\Mon(IoT)r\iot-data\uk"
 
-
     # devices = get_iot_devices("uk")
     # for device in devices:
     #     if device != "yi-camera" or device != "tplink-plug":
     #         analyse_device_events(northeastern_dataset_uk, device)
-
     # analyse_device_events(dataset_file_paths['tplink-plug'], "tplink-plug")
     # analyse_device_events(dataset_file_paths['ring-doorbell'], "ring-doorbell")
     # parse_dataset()
@@ -295,10 +294,12 @@ def main():
     processed_attack_traffic = r"C:\Users\amith\Documents\Uni\Masters\processed-traffic\Attack"
     processed_benign_traffic = r"C:\Users\amith\Documents\Uni\Masters\processed-traffic\Benign"
     processed_benign_2016 = r"C:\Users\amith\Documents\Uni\Masters\processed-traffic\2016"
-    preprocess_device_traffic("Amazon Echo", 'benign')
+    train_clustering_model("Belkin Wemo switch")
+    # preprocess_device_traffic("Amazon Echo",'attack')
+    # preprocess_device_traffic("Amazon Echo", 'attack')
     # for device in infected_devices:
-    #     # if device == "Amazon Echo":
-    #     #     continue
+    #    # if device == "Amazon Echo":
+    #    #     continue
     #     preprocess_device_traffic(device, 'benign')
     #     preprocess_device_traffic(device, 'attack')
     #     train_clustering_model(device)
@@ -307,7 +308,6 @@ def main():
     # modify_timestamp(processed_benign_2016)
     # analyse_dataset(attack_dataset, processed_attack_traffic, malicious_pkts, benign_pkts)
     # processed = ["Dropcam", "Amazon Echo", "Netatmo Welcom", "TP-Link Day Night Cloud camera", "Samsung SmartCam"]
-
     # cluster_device_signature(processed_benign_traffic)
     # compare_attack_and_benign("70:ee:50:18:34:43", "Netatmo Welcom")
 

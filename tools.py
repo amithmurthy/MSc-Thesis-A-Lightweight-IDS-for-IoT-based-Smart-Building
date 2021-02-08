@@ -158,9 +158,9 @@ def get_malicious_flows(folder_path):
                         malicious_flows[device][date].append((elements[4], elements[5], int(elements[7]), int(elements[8]), proto))
     return malicious_flows
 
-def get_device_cluster(device, location, time_scale):
+def get_device_cluster(device, location, direction,time_scale):
     device_cluster = {
-        'Amazon Echo': {'internet':{'50s':9, '100s':9, '180s':7}, 'local':{'50s':9,'100s':7, '180s':10}},
+        'Amazon Echo': {'internet':{'inputs':{'240': 3}, 'outputs':{'240': 2}}, 'local':{'inputs':{'240': 2},'outputs':{'240': 2}}},
         'Belkin wemo motion sensor': {'internet':{'50s':9,'100s':10,'180s':11}, 'local':{'50s':9,'100s':8, '180s':7}},
         'Belkin Wemo switch': {'internet':{'50s':7,'100s':7, '180s':6}, 'local':{'50s':8,'100s':6, '180s':6}},
         'Light Bulbs LiFX Smart Bulb': {'internet':{'50s':6,'100s':6, '150s':6,'180s':9, '200s':6}, 'local':{'50s':5,'100s':5, '150s':4, '180s':5,'200s':4}},
@@ -169,7 +169,7 @@ def get_device_cluster(device, location, time_scale):
         'TP-Link Smart plug':{'internet':{'50s':8,'100s':7, '180s':7}, 'local':{'50s':6,'100s':7, '180s':7}}
     }
 
-    return device_cluster[device][location][time_scale]
+    return device_cluster[device][location][direction][time_scale]
 
 
 def get_ax():
