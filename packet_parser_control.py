@@ -75,14 +75,14 @@ def analyse_dataset(dataset, save_path,malicious_pkts,benign_pkts):
 
     for file in get_pcaps(dataset):
         print(file)
-        if str(file)[-13:-5] in processed_files:
-            continue
+        # if str(file)[-13:-5] in processed_files:
+        #     continue
         traffic_file = NetworkTrace(file)
-        analyse_pcap(traffic_file, FileIO(file), count_limit=5)
+        analyse_pcap(traffic_file, FileIO(file))
         print("creating device objects")
         devices = get_device_objects(traffic_file, malicious_pkts, benign_pkts)
         print("saving traffic")
-        # save_traffic(traffic_file, save_path, devices)
+        save_traffic(traffic_file, save_path, devices)
         # processed_files.append(str(file)[-13:-5])
 
 def analyse_device_events(file_path, device):
@@ -272,9 +272,9 @@ def main():
     # analyse_device_events(dataset_file_paths['tplink-plug'], "tplink-plug")
     # analyse_device_events(dataset_file_paths['ring-doorbell'], "ring-doorbell")
     # parse_dataset()
-    dataset1 = r"C:\Users\amith\Documents\Uni\Masters\Datasets\UNSW\IoT Traces\Extracted"
-    attack_dataset = r"C:\Users\amith\Documents\Uni\Masters\Datasets\UNSW\2018\Attack Data"
-    benign_dataset = r"C:\Users\amith\Documents\Uni\Masters\Datasets\UNSW\2018\Benign Data"
+    dataset1 = r"C:\Users\amithmurthy\Documents\Uni\Masters\Datasets\UNSW\IoT Traces\Extracted"
+    attack_dataset = r"C:\Users\amithmurthy\Documents\Uni\Masters\Datasets\UNSW\2018\Attack Data"
+    benign_dataset = r"C:\Users\amithmurthy\Documents\Uni\Masters\Datasets\UNSW\2018\Benign Data"
     # attack_file = "18-10-20.pcap"
     # benign_file = "18-10-29.pcap"
     test_file = "16-09-23.pcap"
@@ -292,10 +292,11 @@ def main():
     global processed_attack_traffic
     global processed_benign_traffic
     global processed_benign_2016
-    processed_attack_traffic = r"C:\Users\amith\Documents\Uni\Masters\processed-traffic\Attack"
-    processed_benign_traffic = r"C:\Users\amith\Documents\Uni\Masters\processed-traffic\Benign"
-    processed_benign_2016 = r"C:\Users\amith\Documents\Uni\Masters\processed-traffic\2016"
-    preprocess_device_traffic("Amazon Echo", 'benign')
+    processed_attack_traffic = r"C:\Users\amithmurthy\Documents\Uni\Masters\processed-traffic\Attack"
+    processed_benign_traffic = r"C:\Users\amithmurthy\Documents\Uni\Masters\processed-traffic\Benign"
+    processed_benign_2016 = r"C:\Users\amithmurthy\Documents\Uni\Masters\processed-traffic\2016"
+    analyse_dataset(attack_dataset, processed_attack_traffic, [],[])
+    # preprocess_device_traffic("Amazon Echo", 'benign')
     # for device in infected_devices:
     #     # if device == "Amazon Echo":
     #     #     continue

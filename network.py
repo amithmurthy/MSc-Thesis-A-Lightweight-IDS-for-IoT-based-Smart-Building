@@ -45,7 +45,9 @@ class NetworkTrace:
                        "PIX-STAR Photo-frame":"e0:76:d0:33:bb:85",
                        "HP Printer":"70:5a:0f:e4:9b:c0",
                        "Samsung Galaxy Tab":"08:21:ef:3b:fc:e3",
-                       "Nest Dropcam":"30:8c:fb:b6:ea:45"
+                       "Huebulb": "00:17:88:2b:9a:25",
+                       "Chromecast": "f4:f5:d8:8f:0a:3c",
+                       "Nest Dropcam":"30:8c:fb:b6:ea:45",
                        }
 
         #"tplink-plug": "50:c7:bf:b1:d2:78"
@@ -193,6 +195,25 @@ class NetworkTrace:
                 else:
                     self.device_flows[packet_data['eth_dst']]['incoming'][flow_tuple] = []
                     self.device_flows[packet_data['eth_dst']]['incoming'][flow_tuple].append(packet_data)
+
+    def sort_arp_traffic(self, packet_data):
+        src = packet_data['eth_src']
+        dst = packet_data['eth_dst']
+        flow_tuple = (src, dst, packet_data['protocol'])
+        """if src is non iot device in lcoal network we don't append to device flows - only interested in iot traffic"""
+        if src in self.keys_list:
+            if flow_tuple in self.device_flows[src]['outgoing']:
+                self.device_flows[src]['outgoing'][flow_tuple].append(packet_data)
+            else:
+                self.device_flows[src]['outgoing'][flow_tuple] = []
+                self.device_flows[src]['outgoing'][flow_tuple].append(packet_data)
+        if dst in self.keys_list:
+            if flow_tuple in self.device_flows[dst]['incoming']:
+                self.device_flows[dst]['incoming'][flow_tuple].append(packet_data)
+            else:
+                self.device_flows[dst]['incoming'][flow_tuple] = []
+                self.device_flows[dst]['incoming'][flow_tuple].append(packet_data)
+
 
     def save_legend(self,handles, labels, name):
         fig = plt.figure()
