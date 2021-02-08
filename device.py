@@ -952,8 +952,10 @@ class DeviceProfile:
         """this function is for the first time scale (usually 1 min) feature extraction as only total byte and pkt count are required.
         Sliding window and sampling rate should be the same i.e. 60 second sampling rate => 1 min total byte/pkt count"""
         byte_rate, pkt_rate = self.get_rate_type_data_struct(traffic_rate_type)
-        sampling_rate = list(byte_rate.keys())[1] - list(byte_rate.keys())[0]
-        assert sampling_rate == sliding_window
+        keys = list(byte_rate.keys())
+        if len(keys) > 2:
+            sampling_rate = keys[1] - keys[0]
+            assert sampling_rate == sliding_window
         # Check byte rate and pkt rate keys are same i.e. same sampling rate
         assert set(byte_rate.keys()) == set(pkt_rate.keys())
         total_count = {}
