@@ -49,10 +49,10 @@ class ModelDevice:
         self.second_time_scale_features = {sampling_rate: {feature: [] for feature in self.features} for sampling_rate in self.sampling_rates[self.time_scales[1]]}
         self.third_time_scale_features = {sampling_rate: {feature: [] for feature in self.features} for sampling_rate in self.sampling_rates[self.time_scales[2]]}
         # self.fourth_time_scale_features = {sampling_rate: {feature: [] for feature in self.features} for sampling_rate in self.sampling_rates[self.time_scales[3]]}
-        self.device_folder = Path(r"C:\Users\amith\Documents\Uni\Masters\device_attributes") / device_name
-        self.training_data = Path(r"C:\Users\amith\Documents\Uni\Masters\device_attributes") / device_name / "benign_"
-        self.attack_data = Path(r"C:\Users\amith\Documents\Uni\Masters\device_attributes") / device_name / "attack_"
-        self.save_plot_path = Path(r"C:\Users\amith\Documents\Uni\Masters\Graphs\Machine Learning") / device_name
+        self.device_folder = Path(r"C:\Users\amithmurthy\Documents\Uni\Masters\device_attributes") / device_name
+        self.training_data = Path(r"C:\Users\amithmurthy\Documents\Uni\Masters\device_attributes") / device_name / "benign_"
+        self.attack_data = Path(r"C:\Users\amithmurthy\Documents\Uni\Masters\device_attributes") / device_name / "attack_"
+        self.save_plot_path = Path(r"C:\Users\amithmurthy\Documents\Uni\Masters\Graphs\Machine Learning") / device_name
         self.experiment = kwargs['experiment'] if 'experiment' in kwargs else "all"
         self.feature_map = {
             60: 'total_count',
@@ -63,6 +63,8 @@ class ModelDevice:
         self.local_output_model = {feature: [] for feature in self.model_features}
         self.internet_input_model = {feature: [] for feature in self.model_features}
         self.internet_output_model = {feature: [] for feature in self.model_features}
+        self.internet_model = {}
+        self.local_model = {}
         print(device_name)
         self.device_name = device_name
         if model_function == 'preprocess':
@@ -80,7 +82,7 @@ class ModelDevice:
             elif model_function == 'anomaly_detection':
                 self.time_scale_anomalies = None
                 self.anomaly_timestamp = {}
-                self.benign_model = {'internet':{}, 'local':{}}
+                self.benign_model = {'internet': {}, 'local': {}}
                 self.file_device_traffic_duration = {}
                 self.relative_attack_timestamp = {}
                 self.attack_metadata = {}
@@ -91,6 +93,21 @@ class ModelDevice:
                 self.relative_attack_timestamp = {}
                 self.attack_metadata = OrderedDict
                 self.validate_anomalies()
+
+    def set_location_model(self, model, inputs, outputs):
+        directions = ['inputs', 'outputs']
+        for direction in directions:
+            if direction == 'inputs':
+                direction_model = inputs
+                name = 'inputs_'
+            elif direction == 'outputs':
+                direction_model = outputs
+                name = 'outputs_'
+            for feature in direction_model:
+                feature_name = name + feature
+                model[feature_name] = direction_model[feature]
+
+
 
     def get_time_scale_features(self, device_obj):
         """TODO: Abstraction for time_scale required. Currently, only processes two time_scales at a time. """
@@ -199,14 +216,21 @@ class ModelDevice:
             one_min_features = first_time_scale[60][flow_type]
             two_min_features = {sampling_window: second_time_scale[sampling_window][flow_type] for sampling_window in second_time_scale}
             four_min_features = {sampling_window: third_time_scale[sampling_window][flow_type] for sampling_window in third_time_scale}
-            print(four_min_features[10])
             # Check that flow type is same as traffic_model?
             # Take 60s sampling rate as ground truth (10s sampling rate is an experiment)
             last_window = list(four_min_features[10].keys())[-1]
             print(last_window)
+            if len(two_min_features[10][last_window]['byte_count']['volume']) > 1 and two_min_features[10][last_window]['byte_count']['mean'] is None:
+                two_min_features[10][last_window]['byte_count']['mean'] = mean(two_min_features[10][last_window]['byte_count']['volume'])
+                two_min_features[10][last_window]['byte_count']['std'] = stdev(two_min_features[10][last_window]['byte_count']['volume'])
+                two_min_features[10][last_window]['pkt_count']['mean'] = mean(two_min_features[10][last_window]['pkt_count']['volume'])
+                two_min_features[10][last_window]['pkt_count']['std'] = mean(two_min_features[10][last_window]['pkt_count']['volume'])
             if len(four_min_features[10][last_window]['byte_count']['volume']) > 1 and four_min_features[10][last_window]['byte_count']['mean'] is None :
                 four_min_features[10][last_window]['byte_count']['mean'] = mean(four_min_features[10][last_window]['byte_count']['volume'])
                 four_min_features[10][last_window]['byte_count']['std'] = stdev(four_min_features[10][last_window]['byte_count']['volume'])
+                four_min_features[10][last_window]['pkt_count']['mean'] = mean(four_min_features[10][last_window]['pkt_count']['volume'])
+                four_min_features[10][last_window]['pkt_count']['std'] = stdev(four_min_features[10][last_window]['pkt_count']['volume'])
+
             for window in four_min_features[10]:
                 traffic_model['one_min_byte_count'].append(one_min_features[window]['byte_count'])
                 traffic_model['one_min_pkt_count'].append(one_min_features[window]['pkt_count'])
@@ -224,7 +248,12 @@ class ModelDevice:
 
 
         merge_time_scale_features('local_inputs', self.local_input_model)
-        print(self.local_input_model)
+        merge_time_scale_features('local_outputs', self.local_output_model)
+        merge_time_scale_features('internet_inputs', self.internet_input_model)
+        merge_time_scale_features('internet_outputs', self.internet_output_model)
+        self.set_location_model(self.local_model, self.local_input_model, self.local_output_model)
+        self.set_location_model(self.internet_model, self.internet_input_model, self.internet_output_model)
+
         # for sampling_rate in self.sampling_rates:
         #     set_time_scale_attributes(sampling_rate)
         #     device_obj.set_sampling_rate(sampling_rate)
@@ -247,13 +276,13 @@ class ModelDevice:
         if self.saved_features is False:
             i = 1
             for device_obj in self.device_traffic:
-                if i < 3:
+                if i < 2:
                     self.get_time_scale_features(device_obj)
                 else:
                     break
                 i += 1
         # print('finished feature extraction')
-        # self.save_device_traffic_attributes()
+        self.save_model_data()
         # self.plot_graphs()
 
     def plot_graphs(self):
@@ -342,14 +371,14 @@ class ModelDevice:
         plt.show()
 
     def normalise_time_scale(self, df, ts):
-        file_path = Path(r"C:\Users\amith\Documents\Uni\Masters\device_attributes") / self.device_name / "kmeans-model"/ (str(ts) +'scaler.pkl')
+        file_path = Path(r"C:\Users\amithmurthy\Documents\Uni\Masters\device_attributes") / self.device_name / "kmeans-model"/ (str(ts) +'scaler.pkl')
         headers = list(df.columns)
         if self.data_type == 'benign':
             scaler = StandardScaler()
             df[headers] = scaler.fit_transform(df.values)
             pickle.dump(scaler, open(str(file_path), 'wb'))
-            print('scaler mean', scaler.mean_)
-            print('scaler std', scaler.var_)
+            # print('scaler mean', scaler.mean_)
+            # print('scaler std', scaler.var_)
         elif self.data_type == 'attack':
             print('saved scaler used')
             scaler = pickle.load(open(str(file_path), 'rb'))
@@ -364,6 +393,53 @@ class ModelDevice:
                 header = str(sampling_rate) + '_' + str(time_scale) + '_' + str(feature)
                 df[header] = pd.Series(time_scale_features[sampling_rate][feature])
         return df
+
+    def z_score(self, cols, df, org_df, ts, traffic_type):
+        print('calculating z-score')
+        file_path = Path(
+            r"C:\Users\amithmurthy\Documents\Uni\Masters\device_attributes") / self.device_name / "kmeans-model" / (
+                                str(ts) + '-zscore')
+        if file_path.is_dir() is False:
+            file_path.mkdir()
+        z_score_cols = []
+        for col in cols:
+            col_zscore = col + '_zscore'
+            z_score_cols.append(col_zscore)
+            if self.data_type == 'benign':
+                mean = org_df[col].mean()
+                std = org_df[col].std()
+                # print('ddof=0', org_df[col].std(ddof=0))
+                df[col_zscore] = (org_df[col] - mean) / std
+                pickle.dump(mean, open(str(file_path / (col + traffic_type + '_mean.pickle')), 'wb'))
+                pickle.dump(std, open(str(file_path / (col + traffic_type + '_std.pickle')), 'wb'))
+            elif self.data_type == 'attack':
+                mean = pickle.load(open(str(file_path / (col + traffic_type + '_mean.pickle')), 'rb'))
+                std = pickle.load(open(str(file_path / (col + traffic_type + '_std.pickle')), 'rb'))
+                df[col_zscore] = (org_df[col] - mean) / std
+        return df
+
+    def save_model_data(self):
+        save_path = self.device_folder / "normalised"
+
+        def convert_to_df(model):
+            df = pd.DataFrame()
+            for feature in model:
+                df[feature] = model[feature]
+            return df
+
+        internet_model = convert_to_df(self.internet_model)
+        local_model = convert_to_df(self.local_model)
+        internet_model.to_csv(self.device_folder / 'features' / (self.data_type + str(self.time_scales[-1])+"internet_model.csv"))
+        local_model.to_csv(self.device_folder / 'features' / (self.data_type +str(self.time_scales[-1])+ 'local_model.csv'))
+        local_model.replace(np.nan, 0, inplace=True)
+        internet_model.replace(np.nan, 0, inplace=True)
+        self.z_score(list(internet_model.columns), pd.DataFrame(), internet_model, self.time_scales[-1],'internet_model').to_csv(str(save_path / (str(self.time_scales[-1]) + self.data_type + 'zscore_internet.csv')))
+        self.z_score(list(local_model.columns), pd.DataFrame(), local_model, self.time_scales[-1],
+                     'local_model').to_csv(
+            str(save_path / (str(self.time_scales[-1]) + self.data_type + 'zscore_local.csv')))
+        self.normalise_time_scale(internet_model, 'internet').to_csv(str(save_path / (str(self.time_scales[-1]) + self.data_type + 'standardScaler_internet.csv')))
+        self.normalise_time_scale(local_model, 'local').to_csv(str(save_path / (str(self.time_scales[-1]) + self.data_type + 'standardScaler_local.csv')))
+
 
     def save_device_traffic_attributes(self):
         """Takes in one single device instance"""

@@ -88,14 +88,16 @@ class DeviceProfile:
     def sort_flow_location(self, network_obj):
         all_local_network_addresses = list(network_obj.iot_devices.values()) + list(network_obj.non_iot.values()) # mac addresses of local network devices
         # local traffic in pcap
+
         local_network_addresses = [addr for addr in all_local_network_addresses if addr in list(network_obj.mac_to_ip.keys())]
+
         # print(inspect.currentframe().f_code.co_name)
         for flow in list(self.flows["incoming"].keys()):
             if flow == 0:
                 print('flow key is:', flow)
             for local_addr in local_network_addresses:
-                # Checks if flow tuple ip src is from local network; loops through mac_to_ip mac keys to get related ip
-                if flow[0] in network_obj.mac_to_ip[local_addr]:
+                # Checks if flow tuple ip src is from local network; loops through mac_to_ip mac keys to get related ip. or eth_src if flow is arp
+                if flow[0] in network_obj.mac_to_ip[local_addr] or (flow[-1] == "ARP" and flow[0] in all_local_network_addresses):
                     # Only check ip src since dst is device address
                     self.local_input_flows.append(flow)
                 else:
@@ -104,7 +106,7 @@ class DeviceProfile:
             if flow == 0:
                 print('flow is ', flow)
             for local_addr in local_network_addresses:
-                if flow[1] in network_obj.mac_to_ip[local_addr]:
+                if flow[1] in network_obj.mac_to_ip[local_addr] or (flow[-1] == "ARP" and flow[0] in all_local_network_addresses):
                     self.local_output_flows.append(flow)
                 else:
                     self.internet_output_flows.append(flow)
@@ -478,6 +480,13 @@ class DeviceProfile:
             self.internet_output_duration, self.internet_output_first_pkt = internet_output_relative_duration , internet_output_first_pkt_time
             self.local_input_duration, self.local_input_first_pkt = local_input_relative_duration, local_input_first_pkt_time
             self.local_output_duration, self.local_output_first_pkt = local_output_relative_duration, local_output_first_pkt_time
+
+            ##Check duration##
+            if list(self.local_input_rate.keys())[-1] != list(self.local_output_rate.keys())[-1]:
+                print("local inputs and outputs rate have different durations",list(self.local_input_rate.keys())[-1] , list(self.local_output_rate.keys())[-1])
+
+            if list(self.internet_input_rate.keys())[-1] != list(self.internet_output_rate.keys())[-1]:
+                print("internet inputs and outputs have different durations", list(self.internet_input_rate.keys())[-1], list(self.internet_output_rate.keys())[-1])
             print('data structure set', self.sampling_rate)
 
 

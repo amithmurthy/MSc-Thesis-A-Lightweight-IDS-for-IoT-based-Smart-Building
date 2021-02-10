@@ -157,7 +157,7 @@ def preprocess_device_traffic(device_filter, data_type):
             # device_obj.set_location_direction_rates()
 
     print('Number of device instances in dataset', len(device_traffic))
-    ModelDevice(model_function="preprocess", device_name=device_filter, device_traffic=device_traffic, time_scales=[60,120,240], data_type=data_type)
+    ModelDevice(model_function="preprocess", device_name=device_filter, device_traffic=device_traffic, time_scales=[60, 120, 240], data_type=data_type)
 
 def train_clustering_model(device):
     """Train and test device clustering model"""
@@ -274,7 +274,7 @@ def main():
     # parse_dataset()
     dataset1 = r"C:\Users\amithmurthy\Documents\Uni\Masters\Datasets\UNSW\IoT Traces\Extracted"
     attack_dataset = r"C:\Users\amithmurthy\Documents\Uni\Masters\Datasets\UNSW\2018\Attack Data"
-    benign_dataset = r"C:\Users\amithmurthy\Documents\Uni\Masters\Datasets\UNSW\2018\Benign Data"
+    benign_dataset = r"C:\Users\amithmurthy\Documents\Uni\Masters\Datasets\UNSW\2018\to-do"
     # attack_file = "18-10-20.pcap"
     # benign_file = "18-10-29.pcap"
     test_file = "16-09-23.pcap"
@@ -295,7 +295,7 @@ def main():
     processed_attack_traffic = r"C:\Users\amithmurthy\Documents\Uni\Masters\processed-traffic\Attack"
     processed_benign_traffic = r"C:\Users\amithmurthy\Documents\Uni\Masters\processed-traffic\Benign"
     processed_benign_2016 = r"C:\Users\amithmurthy\Documents\Uni\Masters\processed-traffic\2016"
-    analyse_dataset(attack_dataset, processed_attack_traffic, [],[])
+    analyse_dataset(benign_dataset, processed_attack_traffic, [],[])
     # preprocess_device_traffic("Amazon Echo", 'benign')
     # for device in infected_devices:
     #     # if device == "Amazon Echo":
