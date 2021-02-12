@@ -25,8 +25,7 @@ iot = ["Smart Things", "Amazon Echo", "Netatmo Welcom", "TP-Link Day Night Cloud
             "HP Printer", "Samsung Galaxy Tab", "Nest Dropcam", "TPLink Router Bridge LAN (Gateway)"]
 
 
-infected_devices = ["Belkin wemo motion sensor", "Belkin Wemo switch", "Samsung SmartCam", "Light Bulbs LiFX Smart Bulb", "TP-Link Smart plug", "Netatmo Welcom",
-                    "Amazon Echo"]
+infected_devices = ["Belkin wemo motion sensor", "Belkin Wemo switch", "Samsung SmartCam", "Light Bulbs LiFX Smart Bulb", "TP-Link Smart plug", "Netatmo Welcom"]
 remaining = ["TP-Link Smart plug", "Netatmo Welcom",
                     "Amazon Echo"]
 
@@ -144,7 +143,7 @@ def analyse_device_events(file_path, device):
 
 def preprocess_device_traffic(device_filter, data_type):
     traffic = processed_attack_traffic if data_type == 'attack' else processed_benign_traffic
-    network_instances = unpickle_network_trace_and_device_obj(traffic, devices=device_filter)
+    network_instances = unpickle_network_trace_and_device_obj(processed_benign_traffic, devices=device_filter)
     # attack_network_instances = unpickle_network_trace_and_device_obj(processed_attack_traffic, devices=device_filter)
     device_traffic = []
     for network_obj in network_instances:
@@ -259,6 +258,18 @@ def compare_attack_and_benign(device_addr,device_name):
         # device_obj.plot_location_direction_rate()
         # device_obj.plot_flow_type(network_obj.file_name)
 
+def plot_segregated_traffic(device):
+    network_instances = unpickle_network_trace_and_device_obj(processed_benign_2016, limit=8, devices=device)
+    for network_obj in network_instances:
+        for device_obj in network_instances[network_obj]:
+            device_obj.update_profile([],[],False)
+            device_obj.sort_flow_location(network_obj)
+            device_obj.set_sampling_rate(5)
+            device_obj.set_device_activity()
+            device_obj.set_location_direction_rates()
+            device_obj.plot_location_direction_rate(network_obj.file_name)
+
+
 
 def main():
     process_moniotr_file_path = r"C:\Users\amith\Documents\Uni\Masters\processed-traffic\moniotr"
@@ -294,12 +305,14 @@ def main():
     processed_attack_traffic = r"C:\Users\amith\Documents\Uni\Masters\processed-traffic\Attack"
     processed_benign_traffic = r"C:\Users\amith\Documents\Uni\Masters\processed-traffic\Benign"
     processed_benign_2016 = r"C:\Users\amith\Documents\Uni\Masters\processed-traffic\2016"
-    train_clustering_model("Belkin Wemo switch")
-    # preprocess_device_traffic("Amazon Echo",'attack')
-    # preprocess_device_traffic("Amazon Echo", 'attack')
+    devices = ['NEST Protect smoke alarm']
+    for d in devices:
+        plot_segregated_traffic(d)
+
+
     # for device in infected_devices:
-    #    # if device == "Amazon Echo":
-    #    #     continue
+        # if device == "Samsung SmartCam":
+        #     continue
     #     preprocess_device_traffic(device, 'benign')
     #     preprocess_device_traffic(device, 'attack')
     #     train_clustering_model(device)
@@ -310,7 +323,6 @@ def main():
     # processed = ["Dropcam", "Amazon Echo", "Netatmo Welcom", "TP-Link Day Night Cloud camera", "Samsung SmartCam"]
     # cluster_device_signature(processed_benign_traffic)
     # compare_attack_and_benign("70:ee:50:18:34:43", "Netatmo Welcom")
-
 
     dates = ["2018-06-01","2018-06-02", "2018-06-03", "2018-06-04","2018-06-06", "2018-06-07","2018-06-08"]
     # mal_keys = list(malicious_flows.keys())
@@ -328,10 +340,10 @@ def main():
     def process_benign_traffic():
         for device in iot:
             print(device)
-            device_objs, network_objs, dates = unpickle_device_objects(processed_benign_traffic, device, "mal")
+            # device_objs, network_objs, dates = unpickle_device_objects(processed_benign_traffic, device, "benign")
             # print(x)
             # make_graphs = model_device_behaviour(device_objs,dates , mal_flows={}, save_folder=r"D:", behaviour_type='benign')
-            extract_packet_level_signature(device_objs)
+            # extract_packet_level_signature(device_objs)
 
     # process_benign_traffic()
 
@@ -341,7 +353,7 @@ def main():
     #         tp_link_traffic[i].update_profile([],[])
     #         # tp_link_traffic[i].sort_flow_location(network_trace[i])
     #         tp_link_traffic[i].compare_flow_location_traffic()
-    #
+
     # pcap = NetworkTrace(test_file)
     # thread = threading.Thread(target=analyse_pcap(pcap, test_file, count_limit=100000))
     # thread.start()
