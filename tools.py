@@ -157,20 +157,44 @@ def get_malicious_flows(folder_path):
                         malicious_flows[device][date] = []
                         malicious_flows[device][date].append((elements[4], elements[5], int(elements[7]), int(elements[8]), proto))
     return malicious_flows
+#
+# def get_device_cluster(device, location, time_scale):
+#     device_cluster = {
+#         'Amazon Echo': {'internet':{'50s':9, '100s':9, '180s':7}, 'local':{'50s':9,'100s':7, '180s':10}},
+#         'Belkin wemo motion sensor': {'internet':{'50s':9,'100s':10,'180s':11}, 'local':{'50s':9,'100s':8, '180s':7}},
+#         'Belkin Wemo switch': {'internet':{'50s':7,'100s':7, '180s':6}, 'local':{'50s':8,'100s':6, '180s':6}},
+#         'Light Bulbs LiFX Smart Bulb': {'internet':{'50s':6,'100s':6, '150s':6,'180s':9, '200s':6}, 'local':{'50s':5,'100s':5, '150s':4, '180s':5,'200s':4}},
+#         'Netatmo Welcom':{'internet':{'50s':6,'100s':6, '150s':6,'180s':6, '200s':6}, 'local':{'50s':5,'100s':5, '150s':5,'180s':7, '200s':5}},
+#         'Samsung SmartCam':{'internet':{'50s':5,'100s':6, '180s':6}, 'local':{'50s':7,'100s':7,'180s':6}},
+#         'TP-Link Smart plug':{'internet':{'50s':8,'100s':7, '180s':7}, 'local':{'50s':6,'100s':7, '180s':7}}
+#     }
+#
+#     return device_cluster[device][location][time_scale]
 
-def get_device_cluster(device, location, direction,time_scale):
+def get_device_cluster(device, location, feature_set, time_window, s_rate):
     device_cluster = {
-        'Amazon Echo': {'internet':{'inputs':{'240': 3}, 'outputs':{'240': 2}}, 'local':{'inputs':{'240': 2},'outputs':{'240': 2}}},
-        'Belkin wemo motion sensor': {'internet':{'50s':9,'100s':10,'180s':11}, 'local':{'50s':9,'100s':8, '180s':7}},
-        'Belkin Wemo switch': {'internet':{'50s':7,'100s':7, '180s':6}, 'local':{'50s':8,'100s':6, '180s':6}},
-        'Light Bulbs LiFX Smart Bulb': {'internet':{'50s':6,'100s':6, '150s':6,'180s':9, '200s':6}, 'local':{'50s':5,'100s':5, '150s':4, '180s':5,'200s':4}},
-        'Netatmo Welcom':{'internet':{'50s':6,'100s':6, '150s':6,'180s':6, '200s':6}, 'local':{'50s':5,'100s':5, '150s':5,'180s':7, '200s':5}},
-        'Samsung SmartCam':{'internet':{'50s':5,'100s':6, '180s':6}, 'local':{'50s':7,'100s':7,'180s':6}},
-        'TP-Link Smart plug':{'internet':{'50s':8,'100s':7, '180s':7}, 'local':{'50s':6,'100s':7, '180s':7}}
+        'Belkin wemo motion sensor': {'FS2': {'120': {'10': {'internet': 32, 'local': 32}, '30': {'internet': 32, 'local': 32}, '60':{'internet': 32,'local': 32}},
+                                              '240': {'10': {'internet': 32, 'local': 32}, '30': {'internet': 32, 'local': 32}, '60':{'internet': 32,'local': 32}}}},
+        'Belkin Wemo switch': {'FS2': {'120': {'10': {'internet': 64, 'local': 64}, '30': {'internet': 32, 'local': 32}, '60': {'internet': 128, 'local': 128}},
+                                       '240': {'10': {'internet': 32, 'local': 32}, '30': {'internet': 32, 'local': 32}, '60': {'internet': 32, 'local': 32}}}}, #240 local can be 64
+        'Light Bulbs LiFX Smart Bulb': {'FS2': {'120': {'10': {'internet': 32, 'local': 32}, '30': {'internet': 32, 'local': 64},'60': {'internet': 32, 'local': 64}},
+                                                '240': {'10': {'internet': 32, 'local': 64}, '30': {'internet': 64, 'local': 64},'60': {'internet': 64, 'local': 64}}}},
+        'Netatmo Welcom': {'FS2': {'120': {'10': {'internet': 32, 'local': 32, 'all':32}, '30': {'internet': 32, 'local': 32}, '60': {'internet': 32, 'local': 32}},
+                                   '240': {'10': {'internet': 32, 'local': 32}, '30': {'internet': 32, 'local': 32},'60': {'internet': 32, 'local': 32, 'all':32}}},
+                           'FS3': {'120': {'10': {'internet': 32, 'local': 32, 'all': 20}},
+                                   '240': {'60': {'internet': 64, 'local': 6, 'all': 32}}
+                           }},
+        'Samsung SmartCam': {'FS2': {'120': {'10': {'internet': 32, 'local': 32}, '30': {'internet': 32, 'local': 32},'60': {'internet': 32, 'local': 32}},
+                                     '240': {'10': {'internet': 32, 'local': 32}, '30': {'internet': 32, 'local': 32},'60': {'internet': 32, 'local': 32}}}},
+        'TP-Link Smart plug': {'FS2': {'120': {'10': {'internet': 32, 'local': 32}, '30': {'internet': 32, 'local': 32},'60': {'internet': 32, 'local': 32}},
+                                       '240': {'10': {'internet': 32, 'local': 32}, '30': {'internet': 32, 'local': 32}, '60': {'internet': 32, 'local': 32}}}},
+        'Huebulb': {'FS2': {'120': {'10': {'internet': 32, 'local': 32}, '30': {'internet': 32, 'local': 32},'60': {'internet': 32, 'local': 32}},
+                            '240': {'10': {'internet': 32, 'local': 32}, '30': {'internet': 32, 'local': 32}, '60': {'internet': 32, 'local': 32}}}},
+        "iHome": {'FS2': {'120': {'10': {'internet': 32, 'local': 32}, '30': {'internet': 32, 'local': 32},'60': {'internet': 32, 'local': 32}},
+                          '240': {'10': {'internet': 32, 'local': 32}, '30': {'internet': 32, 'local': 32}, '60': {'internet': 32, 'local': 32}}}}
     }
 
-    return device_cluster[device][location][direction][time_scale]
-
+    return device_cluster[device][feature_set][time_window][s_rate][location]
 
 def get_ax():
     fig = plt.figure()
