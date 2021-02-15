@@ -90,6 +90,7 @@ class ModelDevice:
                 self.file_device_traffic_duration = {}
                 self.relative_attack_timestamp = {}
                 self.attack_metadata = {}
+                self.test_instances = None
                 self.anomaly_detection()
             elif model_function == 'validate':
                 self.anomaly_timestamp = {}
@@ -441,7 +442,6 @@ class ModelDevice:
         # test = self.clean_dataset(df_second_time_zscore)
         # df_first_time_scale = clean_dataset(df_first_time_scale)
 
-
     def create_clustering_model(self):
         """TODO: Assign the timescale dataset to a variable i.e. which timescale dataset is being trained"""
         location_models = self.get_location_models()
@@ -557,7 +557,7 @@ class ModelDevice:
         if self.model_function == 'anomaly_detection':
             return cluster_distances
         else:
-            cluster_boundary = {centroid: np.percentile(np.array(cluster_distances[centroid]), 97.5, interpolation='nearest') for centroid in
+            cluster_boundary = {centroid: np.percentile(np.array(cluster_distances[centroid]), 97.5) for centroid in
                                 cluster_distances}
             # print(cluster_boundary)
             return cluster_boundary, cluster_distances
@@ -587,6 +587,7 @@ class ModelDevice:
         # test = KMeans(n_clusters=5)
         # test_x = test.fit(benign_df.values)
         inspect_df = pd.read_csv(str(attack_path/attack_file), index_col=0)
+        self.test_instances = len(inspect_df)
         inspect_data = inspect_df.values
         # attack_centroids = test.fit_predict(inspect_data)
         # print("attack", test.cluster_centers_.shape)
@@ -619,6 +620,7 @@ class ModelDevice:
                     self.time_scale_anomalies[location]['anomalies'].append(instance)
                     self.time_scale_anomalies[location]['anomaly_index'].append(centroid_data_index[i])
                 i += 1
+
         print(location, 'anomalies',j)
 
 
@@ -640,7 +642,7 @@ class ModelDevice:
         pcap_duration = 0
         for i in self.file_device_traffic_duration:
             pcap_duration += self.file_device_traffic_duration[i]
-        if csv_file_duration - pcap_duration < 1000:
+        if csv_file_duration - pcap_duration < (int(self.window) * 3):
             print("device time stamp matches")
         return True
 
@@ -663,7 +665,11 @@ class ModelDevice:
 
 
         attack_window_instances = 0
+        meta_data_keys = list(self.attack_metadata.keys())
+        attack_type_instances = {}
 
+        # print(self.relative_attack_timestamp.items())
+        print(len(self.attack_metadata))
         for file in self.relative_attack_timestamp:
             device_duration = increment_device_time(file)
             # print('device_duration', device_duration)
@@ -674,9 +680,19 @@ class ModelDevice:
                 print((start, end))
                 global_attack_timestamp.append((start, end))
                 duration = end - start
-                attack_window_instances += math.ceil(duration / int(self.window))
+                attack_len = math.ceil(duration / int(self.window))
+                attack_window_instances += attack_len
+                attack_type = self.attack_metadata[rel_attack_time]['attack_type']
+                if attack_type in attack_type_instances:
+                    attack_type_instances[attack_type]['count'] += attack_len
+                    attack_type_instances[attack_type]['timestamp'].append((start, end))
+                else:
+                    attack_type_instances[attack_type] = {'count': 0, 'detected': 0, 'timestamp': [(start, end)]}
+                    attack_type_instances[attack_type]['count'] += attack_len
 
         print(attack_window_instances)
+        print(attack_type_instances.keys())
+        # print(attack_type_instances)
         def ts_index_range(attack_timestamp, time_scale):
             time_scale = int(time_scale[:-1])
             start_i, end_i = int((attack_timestamp[0] / time_scale) - 1), int((attack_timestamp[1] / time_scale) - 1)
@@ -691,7 +707,7 @@ class ModelDevice:
         #     t = int(ts[:-1])
         # rel_time = [500 * i for i in time_scale_anomaly_index['500s']]
 
-        tp = 0
+        # tp = 0
         total = 0
         # print(global_attack_timestamp)
         # print(len(rel_time))
@@ -701,20 +717,40 @@ class ModelDevice:
 
         # print('300s anomalies', int_anomalies)
         tp_anomalies = {location: [] for location in self.time_scale_anomalies}
-        meta_data_keys = list(self.attack_metadata.keys())
+
+        print(self.anomaly_timestamp['all'])
+
         for location in self.time_scale_anomalies:
             for anomaly in self.anomaly_timestamp[location]:
-                i = 0
                 for attack_ts in global_attack_timestamp:
                     if attack_ts[0] <= anomaly <= attack_ts[1]:
-                        tp += 1
-                        tp_anomalies[location].append((int(anomaly), self.attack_metadata[meta_data_keys[i]]['attack_type']))
-                    i += 1
+                        # get attack type
+                        attack = None
+                        for attack_name in attack_type_instances:
+                            for timestamp in attack_type_instances[attack_name]['timestamp']:
+                                if attack is None:
+                                    if attack_ts == timestamp:
+                                        attack = attack_name
+                                else:
+                                    continue
+                        # if attack is None:
+                        #     print(attack_ts, anomaly)
+                        tp_anomalies[location].append((int(anomaly), attack))
 
         for location in tp_anomalies:
-            print(location)
-            print(tp_anomalies[location])
-            print(len(tp_anomalies[location]))
+            for anomaly in tp_anomalies[location]:
+                attack_type_instances[anomaly[1]]['detected'] += 1
+
+        print(len(self.anomaly_timestamp['all']))
+        print(len(tp_anomalies['all']))
+
+        fp = len(self.anomaly_timestamp['all']) - len(tp_anomalies['all'])
+        tp = len(tp_anomalies['all'])
+        tn = self.test_instances - (attack_window_instances - tp)
+        fpr = (fp / (fp + tn)) * 100
+        print('FPR', fpr)
+        print(attack_type_instances)
+
         #     total = len(self.anomaly_timestamp[location])
         #     tp = len(tp_anomalies[location])
         #     print('len of identified', tp)
@@ -838,6 +874,8 @@ class ModelDevice:
             # Data structure to store anomaly timestamp (anomaly_timestamp) is intiated
             self.anomaly_timestamp[location] = []
             for centroid in self.time_scale_anomalies[location]:
+                if centroid != 'anomaly_index':
+                    continue
                 for anomaly_index in self.time_scale_anomalies[location][centroid]:
                     anomaly_timestamp = (anomaly_index + 1) * int(self.window)
                     self.anomaly_timestamp[location].append(anomaly_timestamp)

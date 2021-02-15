@@ -25,9 +25,9 @@ iot = ["Smart Things", "Amazon Echo", "Netatmo Welcom", "TP-Link Day Night Cloud
             "HP Printer", "Samsung Galaxy Tab", "Nest Dropcam", "TPLink Router Bridge LAN (Gateway)"]
 
 
-infected_devices = ["Belkin Wemo switch","Belkin wemo motion sensor", "Samsung SmartCam", "Light Bulbs LiFX Smart Bulb", "TP-Link Smart plug", "Netatmo Welcom"]
-remaining = ["Huebulb", "iHome"]
+infected_devices = ["TP-Link Smart plug", "Netatmo Welcom", "Huebulb", "iHome"]
 
+remianing = ["Belkin Wemo switch","Belkin wemo motion sensor", "Samsung SmartCam", "Light Bulbs LiFX Smart Bulb"]
 device_filter = ["Netatmo Welcom"]
 device_events = {
     "tplink-plug": {
@@ -161,7 +161,7 @@ def train_clustering_model(device, feature_set, window, sampling_window):
     """Train and test device clustering model"""
     # ModelDevice(model_function='preprocess', saved_features=True, time_scales=[200,300], device_name=device)
     # ModelDevice(model_function="train", device_name=device, train_type='find_k', feature_set=feature_set, window=window,sampling_window=sampling_window)
-    ModelDevice(model_function='train', device_name=device, feature_set=feature_set,window=window,sampling_window=sampling_window)
+    # ModelDevice(model_function='train', device_name=device, feature_set=feature_set,window=window,sampling_window=sampling_window)
     ModelDevice(model_function="anomaly_detection", device_name=device, feature_set=feature_set,window=window,sampling_window=sampling_window)
     # ModelDevice(model_function="validate", device_name=device)
 
@@ -300,9 +300,17 @@ def main():
     # new_traffic = r"D:\Benign"
     # analyse_dataset(benign_dataset, processed_attack_traffic, [],[])
     # preprocess_device_traffic("Amazon Echo", 'benign')
+    feature_set = ["FS2", "FS3"]
+    windows = ['120', '240']
+    sampling_rates = ['10', '30', '60']
     # for device in infected_devices:
-    #     # if device == "Amazon Echo":
-    #     #     continue
+    #     for fs in feature_set:
+    #         for sliding_window in windows:
+    #             for s_rate in sampling_rates:
+    #                 train_clustering_model(device, fs, sliding_window, s_rate)
+
+    # train_clustering_model("Belkin Wemo switch", "FS2", '120', '10')
+
     #     train_clustering_model(device, "FS2", "120", "10")
     #     train_clustering_model(device, "FS2", "120", "30")
     #     train_clustering_model(device, "FS2", "120", "60")
