@@ -49,7 +49,6 @@ def analyse_pcap(NetworkTraffic, file, **kwargs):
         epoch_filter = True
         NetworkTraffic.ordinal_timestamp = {}
 
-
     count = 0
     # non_ip_packets = []
     first_pkt_time = None
@@ -76,10 +75,8 @@ def analyse_pcap(NetworkTraffic, file, **kwargs):
                 # Logic Link Control (LLC) frames will have 'len' instead of 'type'.
                 # We disregard those
                 continue
-            if ARP in ether_pkt:
-                continue
-            ipv = None
 
+            ipv = None
             if IP or IPv6 in ether_pkt:
                 if IPv6 in ether_pkt:
                     ip_pkt = ether_pkt[IPv6]
@@ -96,10 +93,18 @@ def analyse_pcap(NetworkTraffic, file, **kwargs):
                         # print("IPv4 packet fragmentation")
             # else:
             #     non_ip_packets.append(ether_pkt)
-            else:
-                continue
+            # else:
+            #     continue
+            packet_data['ordinal'] = count
+            packet_data['eth_src'] = ether_pkt.src
+            packet_data['eth_dst'] = ether_pkt.dst
+            if ARP in ether_pkt:
+                packet_data["protocol"] = "ARP"
+                packet_data['payload_len'] = len(ether_pkt)
+                NetworkTraffic.sort_arp_traffic(packet_data)
 
             if ipv is not None:
+                """"Maps mac address to IP addresses"""
                 if ether_pkt.src not in list(NetworkTraffic.mac_to_ip.keys()):
                     NetworkTraffic.mac_to_ip[ether_pkt.src] = []
                     NetworkTraffic.mac_to_ip[ether_pkt.src].append(ip_pkt.src)
@@ -112,10 +117,6 @@ def analyse_pcap(NetworkTraffic, file, **kwargs):
                 elif ether_pkt.dst in list(NetworkTraffic.mac_to_ip.keys()):
                     if ip_pkt.dst not in NetworkTraffic.mac_to_ip[ether_pkt.dst]:
                         NetworkTraffic.mac_to_ip[ether_pkt.dst].append(ip_pkt.dst)
-
-                packet_data['ordinal'] = count
-                packet_data['eth_src'] = ether_pkt.src
-                packet_data['eth_dst'] = ether_pkt.dst
 
                 packet_data['ip_src'] = ip_pkt.src
                 packet_data['ip_dst'] = ip_pkt.dst
@@ -176,42 +177,21 @@ def analyse_pcap(NetworkTraffic, file, **kwargs):
                     # for layer in get_packet_layers(ether_pkt):
                     #     print(layer.name,"/")
 
-                try:
-                    assert len(ip_pkt) <= 1500
-                except AssertionError:
-                    log("pkt_len", count, packet_data['relative_timestamp'], len(ip_pkt))
+                # try:
+                #     assert len(ip_pkt) <= 1500
+                # except AssertionError:
+                #     log("pkt_len", count, packet_data['relative_timestamp'], len(ip_pkt))
 
                 # print(type(packet_data['relative_timestamp']) is float)
                 # print(count, ":", packet_data['relative_timestamp'])
 
                 flow_tuple = (ip_pkt.src, ip_pkt.dst, src_port, dst_port, packet_data["protocol"])
-                # if flow_tuple != ('52.87.241.159', '192.168.1.106', 443, 46330, "TCP"):
-                #     continue
-                # if flow_tuple != ('192.168.1.106', '52.87.241.159', 46330, 443, "TCP"):
-                #     continue
 
                 # if flow_tuple in NetworkTraffic.flow_table:
                 #     NetworkTraffic.flow_table[flow_tuple].append(packet_data)
                 # else:
                 #     NetworkTraffic.flow_table[flow_tuple] = []
                 #     NetworkTraffic.flow_table[flow_tuple].append(packet_data)
-                """
-                            Appending packet_data to device_traffic dictionary 
-                """
-
-                if ether_pkt.src not in NetworkTraffic.local_device_traffic.keys() and ether_pkt.src not in NetworkTraffic.device_traffic.keys():
-                    if ether_pkt.src in NetworkTraffic.internet_traffic:
-                        NetworkTraffic.internet_traffic[ether_pkt.src].append(packet_data)
-                    else:
-                        NetworkTraffic.internet_traffic[ether_pkt.src] = []
-                        NetworkTraffic.internet_traffic[ether_pkt.src].append(packet_data)
-                if ether_pkt.dst not in NetworkTraffic.local_device_traffic.keys() and ether_pkt.dst not in NetworkTraffic.device_traffic.keys():
-                    if ether_pkt.dst in NetworkTraffic.internet_traffic:
-                        NetworkTraffic.internet_traffic[ether_pkt.dst].append(packet_data)
-                    else:
-                        NetworkTraffic.internet_traffic[ether_pkt.dst] = []
-                        NetworkTraffic.internet_traffic[ether_pkt.dst].append(packet_data)
-
                 if packet_data['protocol'] == "TCP" or packet_data["protocol"] == "UDP":
                     if ether_pkt.src in NetworkTraffic.keys_list:
                         # NetworkTraffic.device_traffic[ether_pkt.src].append(packet_data)
@@ -219,14 +199,27 @@ def analyse_pcap(NetworkTraffic, file, **kwargs):
                     if ether_pkt.dst in NetworkTraffic.keys_list:
                         # NetworkTraffic.device_traffic[ether_pkt.dst].append(packet_data)
                         NetworkTraffic.sort_flow(flow_tuple, packet_data, "incoming", protocol)
-
-
-                if ether_pkt.src in NetworkTraffic.local_device_traffic:
-                    NetworkTraffic.local_device_traffic[ether_pkt.src].append(packet_data)
-                if ether_pkt.dst in NetworkTraffic.local_device_traffic:
-                    NetworkTraffic.local_device_traffic[ether_pkt.dst].append(packet_data)
-                if count % 10000 == 0:
-                    print(count)
+            """
+            Appending packet_data to device_traffic dictionary 
+            """
+            if ether_pkt.src not in NetworkTraffic.local_device_traffic.keys() and ether_pkt.src not in NetworkTraffic.device_traffic.keys():
+                if ether_pkt.src in NetworkTraffic.internet_traffic:
+                    NetworkTraffic.internet_traffic[ether_pkt.src].append(packet_data)
+                else:
+                    NetworkTraffic.internet_traffic[ether_pkt.src] = []
+                    NetworkTraffic.internet_traffic[ether_pkt.src].append(packet_data)
+            # if ether_pkt.dst not in NetworkTraffic.local_device_traffic.keys() and ether_pkt.dst not in NetworkTraffic.device_traffic.keys():
+                #     if ether_pkt.dst in NetworkTraffic.internet_traffic:
+                #         NetworkTraffic.internet_traffic[ether_pkt.dst].append(packet_data)
+                #     else:
+                #         NetworkTraffic.internet_traffic[ether_pkt.dst] = []
+                #         NetworkTraffic.internet_traffic[ether_pkt.dst].append(packet_data)
+            if ether_pkt.src in NetworkTraffic.local_device_traffic:
+                NetworkTraffic.local_device_traffic[ether_pkt.src].append(packet_data)
+            if ether_pkt.dst in NetworkTraffic.local_device_traffic:
+                NetworkTraffic.local_device_traffic[ether_pkt.dst].append(packet_data)
+            if count % 10000 == 0:
+                print(count)
         else:
             break
 

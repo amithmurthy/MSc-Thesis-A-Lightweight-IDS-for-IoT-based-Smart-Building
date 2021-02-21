@@ -84,7 +84,7 @@ def unpickle_network_trace_and_device_obj(file_path, **kwargs):
         if count > limit:
             break
         if file_filter is not None:
-            if str(network_trace)[-9:] not in file_filter or str(network_trace)[-9:] != file_filter:
+            if str(network_trace)[-9:] not in file_filter: #or str(network_trace)[-9:] != file_filter:
                 continue
         network_trace_file_path = file_path + '\_' + str(network_trace)[-8:]
         print("Unpickling", network_trace)
@@ -103,8 +103,6 @@ def unpickle_network_trace_and_device_obj(file_path, **kwargs):
                 network_trace_devices[network_obj].append(device_obj)
     return network_trace_devices
 
-
-
 def open_network_archive(directory, file_name, extract_timestamp_dict):
     d = kl.archives.dir_archive(name=directory, serialized= True)
     d.load('mac_to_ip')
@@ -122,6 +120,11 @@ def open_device_archive(directory):
     d.load('device_traffic')
     d.load('mac_addr')
     d.load('device_name')
+    # try:
+    #     print(d['ip_addrs'])
+    #     print(d.archive._keydict())
+    # except:
+    #     print(d.archive._keydict())
     return DeviceProfile(d['device_name'], d['mac_addr'], d['ip_addrs'], d['device_traffic'])
 
 def create_device_plots(devices, malicious_pkts, benign_pkts):
@@ -173,25 +176,42 @@ def get_malicious_flows(folder_path):
 
 def get_device_cluster(device, location, feature_set, time_window, s_rate):
     device_cluster = {
-        'Belkin wemo motion sensor': {'FS2': {'120': {'10': {'internet': 32, 'local': 32}, '30': {'internet': 32, 'local': 32}, '60':{'internet': 32,'local': 32}},
-                                              '240': {'10': {'internet': 32, 'local': 32}, '30': {'internet': 32, 'local': 32}, '60':{'internet': 32,'local': 32}}}},
-        'Belkin Wemo switch': {'FS2': {'120': {'10': {'internet': 64, 'local': 64}, '30': {'internet': 32, 'local': 32}, '60': {'internet': 128, 'local': 128}},
-                                       '240': {'10': {'internet': 32, 'local': 32}, '30': {'internet': 32, 'local': 32}, '60': {'internet': 32, 'local': 32}}}}, #240 local can be 64
-        'Light Bulbs LiFX Smart Bulb': {'FS2': {'120': {'10': {'internet': 32, 'local': 32}, '30': {'internet': 32, 'local': 64},'60': {'internet': 32, 'local': 64}},
-                                                '240': {'10': {'internet': 32, 'local': 64}, '30': {'internet': 64, 'local': 64},'60': {'internet': 64, 'local': 64}}}},
-        'Netatmo Welcom': {'FS2': {'120': {'10': {'internet': 32, 'local': 32, 'all':32}, '30': {'internet': 32, 'local': 32}, '60': {'internet': 32, 'local': 32}},
-                                   '240': {'10': {'internet': 32, 'local': 32}, '30': {'internet': 32, 'local': 32},'60': {'internet': 32, 'local': 32, 'all':32}}},
-                           'FS3': {'120': {'10': {'internet': 32, 'local': 32, 'all': 20}},
-                                   '240': {'60': {'internet': 64, 'local': 6, 'all': 32}}
+        'Belkin wemo motion sensor': {'FS2': {'120': {'10': {'internet': 32, 'local': 32, 'all': 156}, '30': {'internet': 32, 'local': 32}, '60':{'internet': 32,'local': 32}},
+                                              '240': {'10': {'internet': 32, 'local': 32}, '30': {'internet': 32, 'local': 32}, '60':{'internet': 32,'local': 32}}},
+                                      'FS3': {'120': {'10': {'internet': 64, 'local': 64, 'all': 32},'30': {'internet': 32, 'local': 32, 'all': 32}, '60': {'internet': 128, 'local': 128, 'all': 32}},
+                                              '240': {'10': {'internet': 32, 'local': 32, 'all': 32},'30': {'internet': 32, 'local': 32, 'all': 32}, '60': {'internet': 32, 'local': 32, 'all': 32}}}
+                                      },
+        'Belkin Wemo switch': {'FS2': {'120': {'10': {'internet': 64, 'local': 64, 'all': 16}, '30': {'internet': 32, 'local': 32, 'all': 32}, '60': {'internet': 128, 'local': 128, 'all':16}},
+                                       '240': {'10': {'internet': 32, 'local': 32, 'all': 32}, '30': {'internet': 32, 'local': 32, 'all': 32}, '60': {'internet': 32, 'local': 32, 'all':32}}}, #240 local can be 64
+                               'FS3':{'120': {'10': {'internet': 64, 'local': 64, 'all': 64}, '30': {'internet': 32, 'local': 32, 'all': 64}, '60': {'internet': 128, 'local': 128, 'all':64}},
+                                       '240': {'10': {'internet': 32, 'local': 32, 'all': 32}, '30': {'internet': 32, 'local': 32, 'all': 32}, '60': {'internet': 32, 'local': 32, 'all':32}}}},
+        'Light Bulbs LiFX Smart Bulb': {'FS2': {'120': {'10': {'internet': 32, 'local': 32, 'all':32}, '30': {'internet': 32, 'local': 64, 'all':32}, '60': {'internet': 32, 'local': 64, 'all':32}},
+                                                '240': {'10': {'internet': 32, 'local': 64, 'all':32}, '30': {'internet': 64, 'local': 64, 'all':32}, '60': {'internet': 64, 'local': 64, 'all':32}}},
+                                        'FS3': {'120': {'10': {'internet': 64, 'local': 64, 'all': 64}, '30': {'internet': 32, 'local': 32, 'all': 64},'60': {'internet': 128, 'local': 128, 'all': 64 }},
+                                                '240': {'10': {'internet': 32, 'local': 32, 'all': 64}, '30': {'internet': 32, 'local': 32, 'all': 64}, '60': {'internet': 32, 'local': 32, 'all': 64}}}
+                                        },
+        'Netatmo Welcom': {'FS2': {'120': {'10': {'internet': 32, 'local': 32, 'all': 32}, '30': {'internet': 32, 'local': 32, 'all':64}, '60': {'internet': 32, 'local': 32, 'all':64}},
+                                   '240': {'10': {'internet': 32, 'local': 32,'all': 32}, '30': {'internet': 32, 'local': 32,'all': 32}, '60': {'internet': 32, 'local': 32, 'all': 32}}},
+                           'FS3': {'120': {'10': {'internet': 32, 'local': 32, 'all': 128}, '30': {'internet': 32, 'local': 32, 'all': 128}, '60': {'internet': 32, 'local': 32, 'all': 128}},
+                                   '240': {'10': {'internet': 32, 'local': 32, 'all': 64}, '30': {'internet': 32, 'local': 32, 'all': 64}, '60': {'internet': 32, 'local': 32, 'all': 128}}
                            }},
-        'Samsung SmartCam': {'FS2': {'120': {'10': {'internet': 32, 'local': 32}, '30': {'internet': 32, 'local': 32},'60': {'internet': 32, 'local': 32}},
-                                     '240': {'10': {'internet': 32, 'local': 32}, '30': {'internet': 32, 'local': 32},'60': {'internet': 32, 'local': 32}}}},
-        'TP-Link Smart plug': {'FS2': {'120': {'10': {'internet': 32, 'local': 32}, '30': {'internet': 32, 'local': 32},'60': {'internet': 32, 'local': 32}},
-                                       '240': {'10': {'internet': 32, 'local': 32}, '30': {'internet': 32, 'local': 32}, '60': {'internet': 32, 'local': 32}}}},
-        'Huebulb': {'FS2': {'120': {'10': {'internet': 32, 'local': 32}, '30': {'internet': 32, 'local': 32},'60': {'internet': 32, 'local': 32}},
-                            '240': {'10': {'internet': 32, 'local': 32}, '30': {'internet': 32, 'local': 32}, '60': {'internet': 32, 'local': 32}}}},
-        "iHome": {'FS2': {'120': {'10': {'internet': 32, 'local': 32}, '30': {'internet': 32, 'local': 32},'60': {'internet': 32, 'local': 32}},
-                          '240': {'10': {'internet': 32, 'local': 32}, '30': {'internet': 32, 'local': 32}, '60': {'internet': 32, 'local': 32}}}}
+        'Samsung SmartCam': {'FS2': {'120': {'10': {'internet': 32, 'local': 32, 'all': 128}, '30': {'internet': 32, 'local': 32, 'all': 48}, '60': {'internet': 32, 'local': 32, 'all': 32}},
+                                     '240': {'10': {'internet': 32, 'local': 32, 'all': 32}, '30': {'internet': 32, 'local': 32, 'all': 32}, '60': {'internet': 32, 'local': 32, 'all': 64}}},
+                             'FS3': {'120': {'10': {'internet': 64, 'local': 64, 'all': 36}, '30': {'internet': 32, 'local': 32, 'all': 64}, '60': {'internet': 128, 'local': 128, 'all': 128}},
+                                     '240': {'10': {'internet': 32, 'local': 32, 'all': 64}, '30': {'internet': 32, 'local': 32, 'all': 64}, '60': {'internet': 32, 'local': 32, 'all': 64}}}
+                             },
+        'TP-Link Smart plug': {'FS2': {'120': {'10': {'internet': 32, 'local': 32, 'all': 32}, '30': {'internet': 32, 'local': 32, 'all': 32},'60': {'internet': 32, 'local': 32,'all': 32}},
+                                       '240': {'10': {'internet': 32, 'local': 32,'all': 32}, '30': {'internet': 32, 'local': 32,'all': 32}, '60': {'internet': 32, 'local': 32,'all': 32}}},
+                               'FS3': {'120': {'10': {'internet': 64, 'local': 64, 'all': 64},'30': {'internet': 32, 'local': 32, 'all': 64}, '60': {'internet': 128, 'local': 128, 'all': 64}},
+                                       '240': {'10': {'internet': 32, 'local': 32, 'all': 64}, '30': {'internet': 32, 'local': 32, 'all': 64}, '60': {'internet': 32, 'local': 32, 'all': 64}}}
+                              },
+        'Huebulb': {'FS2': {'120': {'10': {'internet': 32, 'local': 32, 'all': 36}, '30': {'internet': 32, 'local': 32,'all': 36},'60': {'internet': 32, 'local': 32, 'all': 36}},
+                            '240': {'10': {'internet': 32, 'local': 32, 'all': 36}, '30': {'internet': 32, 'local': 32, 'all': 36}, '60': {'internet': 32, 'local': 32, 'all': 36}}}},
+        "iHome": {'FS2': {'120': {'10': {'internet': 32, 'local': 32,'all': 36}, '30': {'internet': 32, 'local': 32,'all': 36},'60': {'internet': 32, 'local': 32,'all': 36}},
+                          '240': {'10': {'internet': 32, 'local': 32, 'all': 36}, '30': {'internet': 32, 'local': 32,'all': 36}, '60': {'internet': 32, 'local': 32,'all': 36}}},
+                  'FS3': {'120': {'10': {'internet': 64, 'local': 64, 'all': 36}, '30': {'internet': 32, 'local': 32, 'all': 64}, '60': {'internet': 128, 'local': 128, 'all': 64}},
+                          '240': {'10': {'internet': 32, 'local': 32, 'all': 64}, '30': {'internet': 32, 'local': 32, 'all': 64}, '60': {'internet': 32, 'local': 32, 'all': 64}}}
+                  }
     }
 
     return device_cluster[device][feature_set][time_window][s_rate][location]
@@ -270,7 +290,8 @@ def get_mac_addr(device_name):
                         "PIX-STAR Photo-frame": "e0:76:d0:33:bb:85",
                         "HP Printer": "70:5a:0f:e4:9b:c0",
                         "Samsung Galaxy Tab": "08:21:ef:3b:fc:e3",
-                        "Nest Dropcam": "30:8c:fb:b6:ea:45"
+                        "Nest Dropcam": "30:8c:fb:b6:ea:45",
+                        "Huebulb": "00:17:88:2b:9a:25"
                         }
     return iot_devices[device_name]
 
@@ -304,3 +325,186 @@ def get_iot_devices(country):
         return uk_iot_devices
     elif country == "us":
         return us_iot_devices
+
+
+
+def ihome_first_pkt_ordinal(file):
+    d = {'18-06-01.pcap': 358, '18-06-02.pcap': 311, '18-06-03.pcap': 2546, '18-06-04.pcap': 1538, '18-06-05.pcap': 260,
+     '18-06-06.pcap': 2661, '18-06-07.pcap': 1579, '18-06-08.pcap': 318, '18-06-20.pcap': 1235,
+     '18-10-22.pcap': 1612615, '18-10-23.pcap': 945, '18-10-24.pcap': 668, '18-10-25.pcap': 423, '18-10-26.pcap': 3,
+     '18-10-27.pcap': 227}
+
+    ordinal_epoch = {
+        1612615: 1540182621.644376000,
+    }
+
+    return ordinal_epoch[d[file]]
+
+def attack_ordinals(device):
+    d = {'Light Bulbs LiFX Smart Bulb': {
+        '18-10-23': [(482650, 498352), (523518, 542777), (565200, 589345), (847094, 861646), (1066551, 1083680), (1108066, 1128057),
+                     (1243449, 1258990), (1282312, 1304485), (1328704, 1357843), (1906842, 1923975), (1946484, 1976280), (1999654, 2051308)],
+        '18-10-24': [(17334,32188), (32682,51256), (51420, 70302)]
+    }}
+    return d[device]
+
+def get_lifx_annotations():
+    rel_attack_time = {'18-10-23': [(16221.548086, 16821.86568), (17828.080217, 18428.032069), (19436.090016, 20036.036149), (31009.442249, 31606.617522), (39407.077718, 40005.309043), (41022.43378, 41622.190927999996)], '18-10-24': [(675.449124, 1266.321328), (1277.437605, 1877.361357), (1887.5936199999999, 2487.5092360000003)]}
+    rel_attack_type = {(16221.548086, 16821.86568):{'attack_type':'ARPSpoof1L2D'}, (17828.080217, 18428.032069): {'attack_type':'ARPSpoof10L2D'}, (19436.090016, 20036.036149): {'attack_type':'ARPSpoof100L2D'}, (31009.442249, 31606.617522): {'attack_type':'UDPDevice1L2D'}, (39407.077718, 40005.309043): {'attack_type':'UDPDevice10L2D'},
+                       (41022.43378, 41622.190927999996): {'attack_type':'UDPDevice100L2D'}, (675.449124, 1266.321328):{'attack_type':'UDPDevice1W2D'}, (1277.437605, 1877.361357): {'attack_type':'UDPDevice10W2D'}, (1887.5936199999999, 2487.5092360000003): {'attack_type':'UDPDevice100W2D'}}
+
+    return rel_attack_time, rel_attack_type
+
+
+def tp_benign_plot():
+    fs2_2min_10 = [97.35957753, 97.22279793, 97.72809232, 90.88891131, 98.13384168]
+    fs2_2min_30 = [92.94512878, 97.03749741, 83.62162162, 87.9072113, 97.70310933]
+    fs2_2min_60 = [97.40924356, 96.90315898, 96.37903081, 88.39177751, 96.03930613]
+    fs2_4min_10 = [90.50064185, 97.45130543, 96.96422118, 83.48512447, 94.15192926]
+    fs2_4min_30 = [89.53786906, 96.83164216, 95.34464092, 87.64158576, 97.16753716]
+    fs2_4min_60 = [89.34873276, 94.42948851, 97.07792208, 88.35049465, 97.30977715]
+    fs3_2min_10 = [95.55128821, 95.32642487, 98.1067436, 96.1154273, 97.89304706]
+    fs3_2min_30 = [94.4968805, 95.2765693, 95.42342342, 95.94553707, 93.76128385]
+    fs3_2min_60 = [95.1383336, 95.2765693, 97.89227166, 90.5280129, 97.02195929]
+    fs3_4min_10 = [93.93453145, 94.59179445, 85.79689194, 87.26978344, 92.56430868]
+    fs3_4min_30 = [88.18998716, 96.00331332, 94.4063515, 92.69822006, 96.14302933]
+    fs3_4min_60 = [92.33237087, 95.63056533, 94.62481962, 93.78154654, 96.2256575]
+    x = [10, 30, 60]
+    print('test')
+    fs2_2min_samples = [fs2_2min_10, fs2_2min_30, fs2_2min_60]
+    fs2_4min_samples = [fs2_4min_10, fs2_4min_30, fs2_4min_60]
+    fs3_2min_samples = [fs3_2min_10, fs3_2min_30, fs3_2min_60]
+    fs3_4min_samples = [fs3_4min_10, fs3_4min_30, fs3_4min_60]
+    fs2_2min = [sum(l) / len(l) for l in fs2_2min_samples]
+    fs2_4min = [sum(i) / len(i) for i in fs2_4min_samples]
+    fs3_2min = [sum(i) / len(i) for i in fs3_2min_samples]
+    fs3_4min = [sum(i) / len(i) for i in fs3_4min_samples]
+    fig = plt.figure()
+    ax = fig.add_subplot(1, 1, 1)
+    ax.plot(x, fs2_2min, marker="^", label='FS1', color='r')
+    ax.plot(x, fs2_4min, marker="x", label='FS2', color='b')
+    ax.plot(x, fs3_2min, marker="o", label="FS3", color='g')
+    ax.plot(x, fs3_4min, marker="+", label="FS4", color='c')
+    for item in ([ax.title, ax.xaxis.label, ax.yaxis.label] +
+                 ax.get_xticklabels() + ax.get_yticklabels()):
+        item.set_fontsize(20)
+    ax.set_xlabel("Sampling rate (s)")
+    ax.set_ylabel("TPR (%)")
+    plt.legend(loc='best')
+    plt.show()
+    plt.savefig("sampling_rate_tpr.png")
+
+def fs_fpr_plot():
+    fs2_2min_10 = [1.855137925, 2.686443315, 1.382823872, 8.585346052, 1.361436063]
+    fs2_2min_30 = [6.260083898, 2.871954381, 15.84768812, 11.3416743, 1.794535739]
+    fs2_2min_60 = [1.837228042, 2.996371177, 2.850917015, 10.81740545, 3.350151362]
+    fs2_4min_10 = [8.530651962, 2.40713841, 1.685599121, 15.55783009, 5.181137422]
+    fs2_4min_30 = [9.474367294, 3.088082902, 3.365032919, 11.17261173, 2.104837078]
+    fs2_4min_60 = [9.753726507, 5.492227979, 1.752464403, 10.63916684, 1.862725248]
+    fs3_2min_10 = [3.84863124, 4.574688797, 0.8925318761, 1.613391147]
+    fs3_2min_30 = [4.756530152, 4.634525661, 3.831487198, 3.234665853, 5.766129032]
+    fs3_2min_60 = [4.172036082, 4.634525661, 1.2, 8.680626144, 2.331684667]
+    fs3_4min_10 = [4.843953186, 5.270803071, 13.42086069, 11.71171171, 6.761133603]
+    fs3_4min_30 = [10.86603957, 3.917098446, 4.560379424, 6.124539123, 3.137016798]
+    fs3_4min_60 = [6.830689544, 4.29015544, 4.514015289, 5.107252298, 2.956063981]
+    x = [10,30,60]
+    fs2_2min_samples = [fs2_2min_10, fs2_2min_30,fs2_2min_60]
+    fs2_4min_samples = [fs2_4min_10, fs2_4min_30, fs2_4min_60]
+    fs3_2min_samples = [fs3_2min_10, fs3_2min_30, fs3_2min_60]
+    fs3_4min_samples = [fs3_4min_10, fs3_4min_30, fs3_4min_60]
+    fs2_2min = [sum(l)/len(l) for l in fs2_2min_samples]
+    fs2_4min = [sum(i)/len(i) for i in fs2_4min_samples]
+    fs3_2min = [sum(i) / len(i) for i in fs3_2min_samples]
+    fs3_4min = [sum(i) / len(i) for i in fs3_4min_samples]
+    fig = plt.figure()
+    ax = fig.add_subplot(1, 1, 1)
+    ax.plot(x, fs2_2min,marker="^",label='FS1', color='r')
+    ax.plot(x, fs2_4min, marker="x", label='FS2', color='b')
+    ax.plot(x, fs3_2min, marker="o", label="FS3", color='g')
+    ax.plot(x, fs3_4min, marker="+", label="FS4", color='c')
+    for item in ([ax.title, ax.xaxis.label, ax.yaxis.label] +
+                 ax.get_xticklabels() + ax.get_yticklabels()):
+        item.set_fontsize(20)
+    ax.set_xlabel("Sampling rate (s)")
+    ax.set_ylabel("FPR (%)")
+    plt.legend(loc='best')
+    plt.show()
+    plt.savefig("sampling_rate_fpr.png")
+
+
+def get_device_type(device, *keys):
+    device_types = {
+        'lighting':['Light Bulbs LiFX Smart Bulb', 'Huebulb'],
+        'camera':['Samsung SmartCam', 'Netatmo Welcom'],
+        'sensor':['Belkin wemo motion sensor'],
+        'switch': ['iHome', 'Belkin Wemo switch', 'TP-Link Smart plug']
+    }
+    if keys:
+        return list(device_types.keys())
+    else:
+        for type in device_types:
+            if device in device_types[type]:
+                return type
+            else:
+                for d_name in device_types[type]:
+                    if d_name in device:
+                        return type
+
+def sampling_rate_detection():
+    device_type_accuracy = { 'camera': {
+            'accuracy': {
+                10: [97.2464, 96.5349483717236],
+                30: [89.7709110282365, 96.3692430120362],
+                60: [97.4742084667378, 94.4212410501193]
+            },
+            'fpr': {
+                10: [2.28384991843393, 2.93371231347071],
+                30: [9.87497735096938, 2.86818551668022],
+                60: [1.83303085299455, 4.799186578546]
+            },
+            'avg_detection_rate': {
+                10: [79.1111111111111, 71.3468013468013],
+                30: [77.7777777777777, 63.6195286195286],
+                60: [72.1313131313131, 62.3484848484848]
+            }
+        },
+
+    }
+s = {'accuracy': {'10': [97.799588412221, 96.6449207828518, 98.44915001491201], '30': [97.71971496437055, 96.02525618465995, 97.86324786324785], '60': [97.48417721518987, 97.27799627406334, 98.03980099502488]},
+     'fpr': {'10': [1.3561511139812723, 3.2572614107883817, 1.0588947156111337], '30': [1.3727390180878551, 3.878058896723352, 1.6533924790805523], '60': [1.6620945618847829, 2.623120787973043, 1.3222973654991421]},
+        'avg_detection_rate': {'10': [56.094276094276104, 44.444444444444436, 68.94736842105263], '30': [55.82491582491582, 44.444444444444436, 68.94736842105263], '60': [55.993265993266, 44.444444444444436, 60.96491228070176]}}
+
+
+def get_s(file_name):
+    rates = ['10', '30', '60']
+    for s in rates:
+        if s in file_name:
+            return s
+
+def plot_sampling_impact(plot_type, model_data, y_label):
+    x = ['10', '30', '60']
+    device_types = get_device_type('iHome', True)
+    device_type_avg = {i: {j: None for j in x } for i in device_types}
+    fig = plt.figure()
+    ax = fig.add_subplot(1, 1, 1)
+    for item in ([ax.title, ax.xaxis.label, ax.yaxis.label] +
+                 ax.get_xticklabels() + ax.get_yticklabels()):
+        item.set_fontsize(15)
+
+    for device_type in model_data:
+        if device_type == 'sensor':
+            continue
+        for s in model_data[device_type][plot_type]:
+            data = model_data[device_type][plot_type][s]
+            device_type_avg[device_type][s] = sum(data) / len(data)
+
+    print(device_type_avg)
+    for d in device_type_avg:
+        if d == "sensor":
+            continue
+        ax.plot(x, list(device_type_avg[d].values()), label=d)
+    ax.set_ylabel(y_label)
+    ax.set_xlabel("sampling rate (s)")
+    plt.legend(loc='best', fontsize=14)
+    plt.savefig(plot_type+"sampling_impact.png")
+    plt.show()

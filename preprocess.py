@@ -70,7 +70,7 @@ class ModelDevice:
         self.internet_model = {}
         self.local_model = {}
         self.device_name = device_name
-        print(device_name)
+        print(device_name, self.feature_set, self.window, self.s_rate)
         if model_function == 'preprocess':
             self.device_traffic = kwargs['device_traffic']
             self.data_type = kwargs['data_type'] if 'data_type' in kwargs else None
@@ -82,6 +82,7 @@ class ModelDevice:
             self.model_function = model_function
             if model_function == 'train':
                 self.train_type = kwargs['train_type'] if 'train_type' in kwargs else None
+                self.boundary = 99.7
                 self.create_clustering_model()
             elif model_function == 'anomaly_detection':
                 self.time_scale_anomalies = None
@@ -91,6 +92,7 @@ class ModelDevice:
                 self.relative_attack_timestamp = {}
                 self.attack_metadata = {}
                 self.test_instances = None
+                self.rel_attack_time_file_filter = []
                 self.anomaly_detection()
             elif model_function == 'validate':
                 self.anomaly_timestamp = {}
@@ -506,7 +508,10 @@ class ModelDevice:
 
     def save_model(self, df, file, location):
         time_scale = self.window
+        start = time.time()
         clusters = get_device_cluster(self.device_name, location, self.feature_set, self.window, self.s_rate)
+        end = time.time()
+        print("training time", end - start)
         print('clusters',clusters)
         km_model, cluster_boundary, cluster_distances = self.train_model(df,clusters)
         folder_name = self.device_folder / "kmeans-model" / self.feature_set / self.window / self.s_rate
@@ -557,7 +562,7 @@ class ModelDevice:
         if self.model_function == 'anomaly_detection':
             return cluster_distances
         else:
-            cluster_boundary = {centroid: np.percentile(np.array(cluster_distances[centroid]), 97.5) for centroid in
+            cluster_boundary = {centroid: np.percentile(np.array(cluster_distances[centroid]), self.boundary) for centroid in
                                 cluster_distances}
             # print(cluster_boundary)
             return cluster_boundary, cluster_distances
@@ -594,8 +599,11 @@ class ModelDevice:
         benign_cluster_model = self.benign_model[location]['cluster_model']
         # self.validate_model(benign_cluster_model, time_scale)
         # X_test = benign_cluster_model.transform(inspect_data)
+        start = time.time()
         results = benign_cluster_model.predict(inspect_data)
-        print("predicted attack data")
+        end = time.time()
+        print('predicting time', end-start)
+        # print("predicted attack data")
         # cluster_points_distances = self.find_cluster_boundary(inspect_data, benign_cluster_model.cluster_centers_, results)
         cluster_points_distances = self.find_cluster_boundary(inspect_data, self.benign_model[location]['benign_centroids'], results)
         """Cluster map => instance index to its respective cluster"""
@@ -609,6 +617,7 @@ class ModelDevice:
     def find_anomalies(self, location, cluster_boundary, cluster_distances, cluster_map):
         # print(time_scale,location, 'boundaries', cluster_boundary)
         j = 0
+        start = time.time()
         for centroid in cluster_distances:
             # print(time_scale, 'distances',  cluster_distances[centroid])
             # print('centroid', centroid, 'boundary', cluster_boundary[centroid])
@@ -620,7 +629,8 @@ class ModelDevice:
                     self.time_scale_anomalies[location]['anomalies'].append(instance)
                     self.time_scale_anomalies[location]['anomaly_index'].append(centroid_data_index[i])
                 i += 1
-
+        end = time.time()
+        print('anomaly detection', end- start)
         print(location, 'anomalies',j)
 
 
@@ -629,10 +639,13 @@ class ModelDevice:
         """TODO: Need to save anomaly outputs and extract for each experiment before running validation - requires methods"""
         self.correlate_index_timestamp()
         # extract attack annotations timestamp
-        self.attack_annotations()
+        if self.device_name != "Light Bulbs LiFX Smart Bulb":
+            self.attack_annotations()
+        else:
+            self.relative_attack_timestamp, self.attack_metadata = get_lifx_annotations()
         self.reconstruct_device_activity()
-        if self.validate_device_activity() is True:
-            self.convert_annotations_to_timescale_index()
+        # if self.validate_device_activity() is True:
+        self.convert_annotations_to_timescale_index()
             # self.link_annotations_and_output()
 
     def validate_device_activity(self):
@@ -669,7 +682,7 @@ class ModelDevice:
         attack_type_instances = {}
 
         # print(self.relative_attack_timestamp.items())
-        print(len(self.attack_metadata))
+        # print(len(self.attack_metadata))
         for file in self.relative_attack_timestamp:
             device_duration = increment_device_time(file)
             # print('device_duration', device_duration)
@@ -677,7 +690,7 @@ class ModelDevice:
             for rel_attack_time in self.relative_attack_timestamp[file]:
                 start = int(device_duration + rel_attack_time[0])
                 end = int(device_duration + rel_attack_time[1])
-                print((start, end))
+                # print((start, end))
                 global_attack_timestamp.append((start, end))
                 duration = end - start
                 attack_len = math.ceil(duration / int(self.window))
@@ -691,7 +704,7 @@ class ModelDevice:
                     attack_type_instances[attack_type]['count'] += attack_len
 
         print(attack_window_instances)
-        print(attack_type_instances.keys())
+        # print(attack_type_instances.keys())
         # print(attack_type_instances)
         def ts_index_range(attack_timestamp, time_scale):
             time_scale = int(time_scale[:-1])
@@ -718,8 +731,6 @@ class ModelDevice:
         # print('300s anomalies', int_anomalies)
         tp_anomalies = {location: [] for location in self.time_scale_anomalies}
 
-        print(self.anomaly_timestamp['all'])
-
         for location in self.time_scale_anomalies:
             for anomaly in self.anomaly_timestamp[location]:
                 for attack_ts in global_attack_timestamp:
@@ -741,24 +752,81 @@ class ModelDevice:
             for anomaly in tp_anomalies[location]:
                 attack_type_instances[anomaly[1]]['detected'] += 1
 
-        print(len(self.anomaly_timestamp['all']))
-        print(len(tp_anomalies['all']))
 
-        fp = len(self.anomaly_timestamp['all']) - len(tp_anomalies['all'])
+        anomalies = attack_window_instances
+        negatives = self.test_instances - anomalies
+        output = len(self.anomaly_timestamp['all'])
         tp = len(tp_anomalies['all'])
-        tn = self.test_instances - (attack_window_instances - tp)
-        fpr = (fp / (fp + tn)) * 100
+        fp = output - tp
+        fn = anomalies - tp
+        tn = negatives - (fn + fp)
+        fpr = ((fp / (fp + tn)) * 100)
+        accuracy = ((tp + tn ) / (tp + tn + fp + fn)) * 100
+        print('accuracy',accuracy)
         print('FPR', fpr)
-        print(attack_type_instances)
+        # print(attack_type_instances)
+        print('tp', tp)
+        print("TP attack instances", (tp/output) * 100)
+        print("TP benign instances", (tn / negatives) * 100)
+        results = {}
+        for attack_key in attack_type_instances:
+            results[attack_key] = {'count': int(attack_type_instances[attack_key]['count']), 'detected': int(attack_type_instances[attack_key]['detected']), 'detection_rate': None}
+            results[attack_key]['detection_rate'] = (int(attack_type_instances[attack_key]['detected']) / int(attack_type_instances[attack_key]['count'])) * 100
 
-        #     total = len(self.anomaly_timestamp[location])
-        #     tp = len(tp_anomalies[location])
-        #     print('len of identified', tp)
-        #     print('TP:',  tp / total)
-        #     print('FP:', (total - tp) / total)
-        #     print(tp_anomalies['internet'])
+        total_rate = 0
+        for i in results:
+            if 'Icmp' in results or "smurf" in results or "Ping" in results:
+                continue
+            total_rate += results[i]['detection_rate']
 
-    #
+        filter = []
+        for i in results:
+            if 'Icmp' in i or 'smurf' in i or "Ping" in i:
+                if 'ping' in results:
+                    print(i)
+                continue
+            else:
+                filter.append(i)
+
+        avg_detection_rate = total_rate / len(filter)
+
+        def save_results():
+            import csv
+            fields = ['attack', 'count', 'detected', 'detection_rate']
+            save_csv = Path(r"C:\Users\amith\Documents\Uni\Masters\results") / self.device_name/self.feature_set / self.window / self.s_rate
+            type = get_device_type(self.device_name)
+            save_device_type_results = Path(r'C:\Users\amith\Documents\Uni\Masters\results\device_type\sampling window')
+            with open(str(save_csv / 'detection_results.csv'), 'w') as f:
+                w = csv.DictWriter(f, fields)
+                for key, val in sorted(results.items()):
+                    row = {'attack': key}
+                    row.update(val)
+                    w.writerow(row)
+
+            metrics = {'True Positives':None, 'False Positives':None, 'True Negatives':None, 'False Negatives':None, "FPR":None, "TP attack":None, "TP benign":None, 'N':None, 'accuracy':None, 'average detection rate':None}
+            metrics['True Positives'] = tp
+            metrics['False Positives'] = fp
+            metrics['True Negatives'] = tn
+            metrics['False Negatives'] = fn
+            metrics['FPR'] = fpr
+            metrics['TP attack'] = (tp/output) * 100
+            metrics['TP benign'] = (tn / negatives) * 100
+            metrics['N'] = self.test_instances
+            metrics['accuracy'] = accuracy
+            metrics['average detection rate'] = avg_detection_rate
+            with open(str(save_csv/'model_accuracy.csv'), 'w') as c:
+                dw = csv.writer(c)
+                for key, value in metrics.items():
+                    dw.writerow([key, value])
+
+            with open(str(save_device_type_results / (self.device_name + self.s_rate+ ".csv")), 'w') as fd:
+                wc = csv.writer(fd)
+                for key, value in metrics.items():
+                    wc.writerow([key, value])
+
+            print("SAVED RESULTS")
+
+        save_results()
 
     def link_annotations_and_output(self):
         pass
@@ -797,12 +865,16 @@ class ModelDevice:
             if start_date == end_date:
                 nest_metadata(start_date, (datetime.utcfromtimestamp(start_epoch).strftime('%H:%M:%S'), datetime.utcfromtimestamp(end_epoch).strftime('%H:%M:%S')), start_epoch)
             else:
-                print('different dates', start_epoch)
+                print('attack annotations different dates', start_epoch)
                 nest_metadata(start_date, (datetime.utcfromtimestamp(start_epoch).strftime('%H:%M:%S'), "23:59:59"), start_epoch)
                 nest_metadata(end_date, ("00:00:00", datetime.utcfromtimestamp(end_epoch).strftime('%H:%M:%S')), start_epoch)
 
+        # if self.device_name == "Light Bulbs LiFX Smart Bulb":
+        #     self.link_file_device_time()
+        # else:
         device_first_pkt = self.get_attack_file_first_pkt_epoch(attacks)
         self.get_relative_attack_timestamps(device_first_pkt, attacks)
+        # print("rel_attack_timestamp struct", self.relative_attack_timestamp)
         #Link relative time to metadata
         for date in self.relative_attack_timestamp:
             relative_timestamps = self.relative_attack_timestamp[date]
@@ -819,6 +891,8 @@ class ModelDevice:
         for file in device_first_pkt:
             # print('first pkt time in file', device_first_pkt[file])
             # print('attack timestamps in file', attack_times[file])
+            if file in self.rel_attack_time_file_filter:
+                continue
             self.relative_attack_timestamp[file] = []
             first_pkt_time = datetime.strptime(device_first_pkt[file], '%H:%M:%S')
             attack_timestamps = list(attack_times[file].keys())
@@ -848,24 +922,88 @@ class ModelDevice:
                     # print(pkt_date, "20" + pcap.name[:-5])
                     assert pkt_date == ("20" + pcap.name[:-5])
                 except AssertionError:
+                    self.rel_attack_time_file_filter.append(pcap.name[:-5])
+                    print(self.rel_attack_time_file_filter)
                     print("First pkt date is different to file")
                     print("pkt date", pkt_date)
                     print("file", pcap.name)
                 # print('test', datetime.utcfromtimestamp(first_pkt_epoch).strftime('%H:%M:%S'))
         return first_pkt_time
 
+    def link_file_device_time(self):
+        def get_first_pkt_time(device_obj):
+            smallest_time = None
+            for direction in device_obj.flows:
+                for flow in device_obj.flows[direction]:
+                    start_pkt = device_obj.flows[direction][flow][0]['relative_timestamp']
+                    if smallest_time is None:
+                        smallest_time = start_pkt
+                    else:
+                        if start_pkt < smallest_time:
+                            smallest_time = start_pkt
+                        else:
+                            continue
+            return smallest_time
+
+        def map_ordinal_rel_time(file, attack_ordinals, device_obj):
+            ordinal_time_map = {ordinal: None for ordinal in [element for tupl in attack_ordinals for element in tupl]}
+            # print(ordinal_time_map)
+            for direction in device_obj.flows:
+                flow_table = device_obj.flows[direction] # Easier readibility. direction flow table
+                for flow in flow_table:
+                    for pkt in flow_table[flow]:
+                        if pkt['ordinal'] in ordinal_time_map:
+                            ordinal_time_map[pkt['ordinal']] = pkt['relative_timestamp']
+            return ordinal_time_map
+
+
+        processed_attack_traffic = r"D:\New back up\Takeout\Drive\UNSW device traffic\Attack"
+        # Get relative ordinals of attack start, end for attack in file
+        attack_file_ordinals = attack_ordinals(self.device_name)
+        f = [str("_"+file) for file in attack_file_ordinals]
+        print("attack ordinal file names", attack_file_ordinals.keys())
+        # Get device traffic from these files
+        network_instance = unpickle_network_trace_and_device_obj(processed_attack_traffic, devices=self.device_name, files=f)
+
+        for network_obj in network_instance:
+            file_rel_pkt_time = None
+            for device_obj in network_instance[network_obj]:
+                file_rel_pkt_time = get_first_pkt_time(device_obj)
+                # Find and set rel_attack time
+                attack_file_name = network_obj.file_name[:-5]
+                print("attack file", attack_file_name)
+                self.relative_attack_timestamp[attack_file_name] = []
+                ordinal_time = map_ordinal_rel_time(attack_file_name,attack_file_ordinals[attack_file_name], device_obj)
+                for attack_ordinal in attack_file_ordinals[attack_file_name]:
+                    if ordinal_time[attack_ordinal[0]] is not None or ordinal_time[attack_ordinal[1]] is not None:
+                        start = ordinal_time[attack_ordinal[0]]
+                        end = ordinal_time[attack_ordinal[1]]
+                        rel_start = start - file_rel_pkt_time
+                        rel_end = end - file_rel_pkt_time
+                        print('ordinal timestamp', attack_ordinal, (rel_start, rel_end))
+                        self.relative_attack_timestamp[attack_file_name].append((rel_start, rel_end))
+                    else:
+                        print('No timestamp ordianls', attack_ordinal)
+        print(self.relative_attack_timestamp)
+
+
+
     def read_pcap(self, pcap_file):
         device_filter = get_mac_addr(self.device_name)
-        count = 0
-        print('reading',pcap_file)
-        for pkt_data, pkt_metadata in RawPcapReader(pcap_file):
-            count += 1
-            ether_pkt = Ether(pkt_data)
-            if ether_pkt.src == device_filter or ether_pkt.dst == device_filter:
-                # print('pkt ordinal', count)
-                return ((pkt_metadata.tshigh << 32) | pkt_metadata.tslow) / pkt_metadata.tsresol
-            else:
-                continue
+        if self.device_name == "iHome" and "18-10-22.pcap" in str(pcap_file.name) :
+            print('getting epoch from tools.py')
+            return ihome_first_pkt_ordinal("18-10-22.pcap")
+        else:
+            count = 0
+            print('reading',pcap_file)
+            for pkt_data, pkt_metadata in RawPcapReader(pcap_file):
+                count += 1
+                ether_pkt = Ether(pkt_data)
+                if ether_pkt.src == device_filter or ether_pkt.dst == device_filter:
+                    # print('pkt ordinal', count)
+                    return ((pkt_metadata.tshigh << 32) | pkt_metadata.tslow) / pkt_metadata.tsresol
+                else:
+                    continue
 
     def correlate_index_timestamp(self):
         for location in self.time_scale_anomalies:

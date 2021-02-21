@@ -45,10 +45,10 @@ class NetworkTrace:
                        "PIX-STAR Photo-frame":"e0:76:d0:33:bb:85",
                        "HP Printer":"70:5a:0f:e4:9b:c0",
                        "Samsung Galaxy Tab":"08:21:ef:3b:fc:e3",
-                       "Nest Dropcam":"30:8c:fb:b6:ea:45"
+                       "Huebulb": "00:17:88:2b:9a:25",
+                       "Chromecast": "f4:f5:d8:8f:0a:3c",
+                       "Nest Dropcam":"30:8c:fb:b6:ea:45",
                        }
-
-        #"tplink-plug": "50:c7:bf:b1:d2:78"
         self.iot_mac_addr = self.iot_devices.values()
         self.non_iot = {
             "Android Phone": "40:f3:08:ff:1e:da",
@@ -194,6 +194,25 @@ class NetworkTrace:
                     self.device_flows[packet_data['eth_dst']]['incoming'][flow_tuple] = []
                     self.device_flows[packet_data['eth_dst']]['incoming'][flow_tuple].append(packet_data)
 
+    def sort_arp_traffic(self, packet_data):
+        src = packet_data['eth_src']
+        dst = packet_data['eth_dst']
+        flow_tuple = (src, dst, packet_data['protocol'])
+        """if src is non iot device in lcoal network we don't append to device flows - only interested in iot traffic"""
+        if src in self.keys_list:
+            if flow_tuple in self.device_flows[src]['outgoing']:
+                self.device_flows[src]['outgoing'][flow_tuple].append(packet_data)
+            else:
+                self.device_flows[src]['outgoing'][flow_tuple] = []
+                self.device_flows[src]['outgoing'][flow_tuple].append(packet_data)
+        if dst in self.keys_list:
+            if flow_tuple in self.device_flows[dst]['incoming']:
+                self.device_flows[dst]['incoming'][flow_tuple].append(packet_data)
+            else:
+                self.device_flows[dst]['incoming'][flow_tuple] = []
+                self.device_flows[dst]['incoming'][flow_tuple].append(packet_data)
+
+
     def save_legend(self,handles, labels, name):
         fig = plt.figure()
         ax1 = fig.add_subplot(1, 1, 1)
@@ -258,7 +277,7 @@ class NetworkTrace:
     def device_flow_direction_signature(self, device_objs):
         import tools
         ax = tools.get_ax()
-        plot_name = 'input_flow_device_signature.png'
+        plot_name = 'flow_direction_signature.png'
         ax.set_xlabel("Mean traffic volume (bytes)")
         ax.set_ylabel("Standard deviation traffic volume (bytes)")
         ax.set_title("Device flow direction rate signature")
@@ -288,9 +307,9 @@ class NetworkTrace:
             if len(input_x) > 0 and len(input_y) > 0:
                 col = get_unique_colour()
                 ax.scatter(input_x, input_y, label=device_obj.device_name + ' inputs', color=col)
-            # if len(output_x) > 0 and len(output_y) > 0:
-            #     col = get_unique_colour()
-            #     ax.scatter(output_x, output_y, label=device_obj.device_name + ' ouputs', color=col)
+            if len(output_x) > 0 and len(output_y) > 0:
+                col = get_unique_colour()
+                ax.scatter(output_x, output_y, label=device_obj.device_name + ' ouputs', color=col)
 
         save_path = Path(self.save_folder) / str(self.file_name + plot_name)
         plt.savefig(str(save_path))

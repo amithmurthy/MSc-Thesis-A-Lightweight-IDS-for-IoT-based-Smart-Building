@@ -88,14 +88,16 @@ class DeviceProfile:
     def sort_flow_location(self, network_obj):
         all_local_network_addresses = list(network_obj.iot_devices.values()) + list(network_obj.non_iot.values()) # mac addresses of local network devices
         # local traffic in pcap
+
         local_network_addresses = [addr for addr in all_local_network_addresses if addr in list(network_obj.mac_to_ip.keys())]
+
         # print(inspect.currentframe().f_code.co_name)
         for flow in list(self.flows["incoming"].keys()):
             if flow == 0:
                 print('flow key is:', flow)
             for local_addr in local_network_addresses:
-                # Checks if flow tuple ip src is from local network; loops through mac_to_ip mac keys to get related ip
-                if flow[0] in network_obj.mac_to_ip[local_addr]:
+                # Checks if flow tuple ip src is from local network; loops through mac_to_ip mac keys to get related ip. or eth_src if flow is arp
+                if flow[0] in network_obj.mac_to_ip[local_addr] or (flow[-1] == "ARP" and flow[0] in all_local_network_addresses):
                     # Only check ip src since dst is device address
                     self.local_input_flows.append(flow)
                 else:
@@ -104,7 +106,7 @@ class DeviceProfile:
             if flow == 0:
                 print('flow is ', flow)
             for local_addr in local_network_addresses:
-                if flow[1] in network_obj.mac_to_ip[local_addr]:
+                if flow[1] in network_obj.mac_to_ip[local_addr] or (flow[-1] == "ARP" and flow[0] in all_local_network_addresses):
                     self.local_output_flows.append(flow)
                 else:
                     self.internet_output_flows.append(flow)
@@ -409,10 +411,8 @@ class DeviceProfile:
                     print("key not in dict", time_interval_key)
                     print('last key in dict', list(rate_dict.keys())[-1])
 
-    def set_location_direction_rates(self, *control_feature_extraction):
+    def set_location_direction_rates(self):
         """Function sets the relative duration of location and direction of traffic"""
-        assert self.sampling_rate is not None
-
         def extract_features(first_pkt_time, rel_duration, location_direction):
             if location_direction == 'internet_inputs':
                 self.internet_input_rate = {time_interval: 0 for time_interval in
@@ -447,38 +447,46 @@ class DeviceProfile:
         if self.internet_input_rate is not None:
             self.internet_input_rate = {time_interval: 0 for time_interval in range(0, self.internet_input_duration + self.sampling_rate, self.sampling_rate)}
             self.internet_input_pkt_rate = {time_interval: 0 for time_interval in range(0, self.internet_input_duration + self.sampling_rate, self.sampling_rate)}
+            extract_features(self.internet_input_first_pkt, self.internet_input_duration, 'internet_inputs')
             self.internet_output_rate = {time_interval: 0 for time_interval in range(0, self.internet_output_duration + self.sampling_rate, self.sampling_rate)}
             self.internet_output_pkt_rate = {time_interval: 0 for time_interval in range(0, self.internet_output_duration + self.sampling_rate, self.sampling_rate)}
+            extract_features(self.internet_output_first_pkt, self.internet_output_duration, 'internet_outputs')
             self.local_input_rate = {time_interval: 0 for time_interval in range(0, self.local_input_duration + self.sampling_rate, self.sampling_rate)}
             self.local_input_pkt_rate = {time_interval: 0 for time_interval in range(0, self.local_input_duration + self.sampling_rate, self.sampling_rate)}
+            extract_features(self.local_input_first_pkt, self.local_input_duration, 'local_inputs')
             self.local_output_rate = {time_interval: 0 for time_interval in range(0, self.local_output_duration + self.sampling_rate, self.sampling_rate)}
             self.local_output_pkt_rate = {time_interval: 0 for time_interval in range(0, self.local_output_duration + self.sampling_rate, self.sampling_rate)}
-            extract_features(self.internet_input_first_pkt, self.internet_input_duration, 'internet_inputs')
-            extract_features(self.internet_output_first_pkt, self.internet_output_duration, 'internet_outputs')
-            extract_features(self.local_input_first_pkt, self.local_input_duration, 'local_inputs')
             extract_features(self.local_output_first_pkt, self.local_output_duration, 'local_outputs')
             # print('internet_outputs', self.internet_output_rate.items())
             print('new sampling rate data structures set', self.sampling_rate)
 
         else:
             internet_input_first_pkt_time, internet_input_relative_duration = self.get_duration_and_first_pkt_time(self.internet_input_flows, "incoming")
+            extract_features(internet_input_first_pkt_time,internet_input_relative_duration, "internet_inputs")
             internet_output_first_pkt_time, internet_output_relative_duration = self.get_duration_and_first_pkt_time(self.internet_output_flows, "outgoing")
+            # self.internet_output_rate = {time_interval: 0 for time_interval in range(0, internet_output_relative_duration + self.sampling_rate, self.sampling_rate)}
+            extract_features(internet_output_first_pkt_time, internet_output_relative_duration, 'internet_outputs')
+            # self.get_location_direction_rate(self.internet_output_flows, internet_output_first_pkt_time, self.internet_output_rate, "outgoing")
             local_input_first_pkt_time, local_input_relative_duration = self.get_duration_and_first_pkt_time(self.local_input_flows, "incoming")
+            extract_features(local_input_first_pkt_time, local_input_relative_duration, 'local_inputs')
+            # self.local_input_rate = {time_interval:0 for time_interval in range(0, local_input_relative_duration + self.sampling_rate, self.sampling_rate)}
+            # self.get_location_direction_rate(self.local_input_flows, local_input_first_pkt_time, self.local_input_rate, "incoming")
             local_output_first_pkt_time, local_output_relative_duration = self.get_duration_and_first_pkt_time(self.local_output_flows, "outgoing")
-            if control_feature_extraction:
-                print('features not extracted')
-            else:
-                extract_features(internet_input_first_pkt_time,internet_input_relative_duration, "internet_inputs")
-                extract_features(internet_output_first_pkt_time, internet_output_relative_duration, 'internet_outputs')
-                extract_features(local_input_first_pkt_time, local_input_relative_duration, 'local_inputs')
-                extract_features(local_output_first_pkt_time, local_output_relative_duration, 'local_outputs')
-
+            extract_features(local_output_first_pkt_time, local_output_relative_duration, 'local_outputs')
+            # self.local_output_rate = {time_interval: 0 for time_interval in range(0, local_output_relative_duration + self.sampling_rate, self.sampling_rate)}
+            # self.get_location_direction_rate(self.local_output_flows, local_output_first_pkt_time, self.local_output_rate, "outgoing")
             self.internet_input_duration, self.internet_input_first_pkt = internet_input_relative_duration, internet_input_first_pkt_time
             self.internet_output_duration, self.internet_output_first_pkt = internet_output_relative_duration , internet_output_first_pkt_time
             self.local_input_duration, self.local_input_first_pkt = local_input_relative_duration, local_input_first_pkt_time
             self.local_output_duration, self.local_output_first_pkt = local_output_relative_duration, local_output_first_pkt_time
-            print('data structure set', self.sampling_rate)
 
+            ##Check duration##
+            if list(self.local_input_rate.keys())[-1] != list(self.local_output_rate.keys())[-1]:
+                print("local inputs and outputs rate have different durations",list(self.local_input_rate.keys())[-1] , list(self.local_output_rate.keys())[-1])
+
+            if list(self.internet_input_rate.keys())[-1] != list(self.internet_output_rate.keys())[-1]:
+                print("internet inputs and outputs have different durations", list(self.internet_input_rate.keys())[-1], list(self.internet_output_rate.keys())[-1])
+            print('data structure set', self.sampling_rate)
 
     def get_duration_and_first_pkt_time(self, filter, direction):
         first_pkt_time = None
@@ -526,17 +534,42 @@ class DeviceProfile:
         ax = fig.add_subplot(1, 1, 1)
         from pathlib import Path
         save_path = Path(r'C:\Users\amith\Documents\Uni\Masters\Graphs\traffic_segregation')
-        ax.plot(self.convert_to_min(list(self.internet_input_rate.keys())), self.convert_to_KB(list(self.internet_input_rate.values())), label='internet inputs', color='r')
-        ax.plot(self.convert_to_min(list(self.internet_output_rate.keys())), self.convert_to_KB(list(self.internet_output_rate.values())), label='internet outputs', color='b')
+        ax.plot(self.convert_to_min(list(self.internet_input_rate.keys())), self.convert_to_KB(list(self.internet_input_rate.values())), label='Internet inputs', color='r')
+        ax.plot(self.convert_to_min(list(self.internet_output_rate.keys())), self.convert_to_KB(list(self.internet_output_rate.values())), label='Internet outputs', color='b')
         ax.plot(self.convert_to_min(list(self.local_input_rate.keys())), self.convert_to_KB(list(self.local_input_rate.values())), label='local inputs', color='m')
-        ax.plot(self.convert_to_min(list(self.local_output_rate.keys())), self.convert_to_KB(list(self.local_output_rate.values())), label="local ouputs", color='g')
+        ax.plot(self.convert_to_min(list(self.local_output_rate.keys())), self.convert_to_KB(list(self.local_output_rate.values())), label="local ouputs", color='c')
         ax.set_xlabel('Time (minutes)')
-        ax.set_ylabel('Throughput (KB)')
-        ax.set_title('Traffic flow segregation')
-        plt.legend(loc='best')
+        ax.set_ylabel('Byte count (KB)')
+        for item in ([ax.title, ax.xaxis.label, ax.yaxis.label] +
+                     ax.get_xticklabels() + ax.get_yticklabels()):
+            item.set_fontsize(12)
+        plt.legend(bbox_to_anchor=(0., 1.02, 1., .102), loc=3,
+                   ncol=2, mode="expand",prop={'size':12},borderaxespad=0.)
         trace_file = date[0] if date else ""
         plt.savefig(save_path / (self.device_name + trace_file + "location_direction_rates.png"))
         plt.show()
+
+
+    def plot_location_direction_pkt_rate(self, *date):
+        fig = plt.figure()
+        ax = fig.add_subplot(1, 1, 1)
+        from pathlib import Path
+        save_path = Path(r'C:\Users\amith\Documents\Uni\Masters\Graphs\pkt_rate')
+        ax.plot(self.convert_to_min(list(self.internet_input_pkt_rate.keys())), list(self.internet_input_pkt_rate.values()), label='Internet inputs', color='r')
+        ax.plot(self.convert_to_min(list(self.internet_output_pkt_rate.keys())), list(self.internet_output_pkt_rate.values()), label='Internet outputs', color='b')
+        ax.plot(self.convert_to_min(list(self.local_input_pkt_rate.keys())), list(self.local_input_pkt_rate.values()), label='local inputs', color='m')
+        ax.plot(self.convert_to_min(list(self.local_output_pkt_rate.keys())), list(self.local_output_pkt_rate.values()), label="local ouputs", color='g')
+        ax.set_xlabel('Time (minutes)')
+        ax.set_ylabel('Packet count')
+        for item in ([ax.title, ax.xaxis.label, ax.yaxis.label] +
+                     ax.get_xticklabels() + ax.get_yticklabels()):
+            item.set_fontsize(13.2)
+        plt.legend(bbox_to_anchor=(0., 1.02, 1., .102), loc=3,
+                   ncol=2, mode="expand", prop={'size': 12}, borderaxespad=0.)
+        trace_file = date[0] if date else ""
+        plt.savefig(save_path / (self.device_name + trace_file + "location_direction_pkt_rates.png"))
+        plt.show()
+
 
     def plot_flow_throughput(self):
         fig = plt.figure()
@@ -751,7 +784,7 @@ class DeviceProfile:
         # print('last pkt time', last_pkt_time)
         duration = last_pkt_time - first_pkt_time
         if args:
-            return duration, first_pkt_time
+            return duration
         self.device_activity = {key: 0 for key in range(0, int(duration) +self.sampling_rate, self.sampling_rate)}
         self.get_device_traffic_rate(first_pkt_time)
 
@@ -962,10 +995,8 @@ class DeviceProfile:
         """this function is for the first time scale (usually 1 min) feature extraction as only total byte and pkt count are required.
         Sliding window and sampling rate should be the same i.e. 60 second sampling rate => 1 min total byte/pkt count"""
         byte_rate, pkt_rate = self.get_rate_type_data_struct(traffic_rate_type)
-        keys = list(byte_rate.keys())
-        if len(keys) > 2:
-            sampling_rate = keys[1] - keys[0]
-            assert sampling_rate == sliding_window
+        sampling_rate = list(byte_rate.keys())[1] - list(byte_rate.keys())[0]
+        assert sampling_rate == sliding_window
         # Check byte rate and pkt rate keys are same i.e. same sampling rate
         assert set(byte_rate.keys()) == set(pkt_rate.keys())
         total_count = {}
