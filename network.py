@@ -49,8 +49,6 @@ class NetworkTrace:
                        "Chromecast": "f4:f5:d8:8f:0a:3c",
                        "Nest Dropcam":"30:8c:fb:b6:ea:45",
                        }
-
-        #"tplink-plug": "50:c7:bf:b1:d2:78"
         self.iot_mac_addr = self.iot_devices.values()
         self.non_iot = {
             "Android Phone": "40:f3:08:ff:1e:da",
@@ -214,7 +212,6 @@ class NetworkTrace:
                 self.device_flows[dst]['incoming'][flow_tuple] = []
                 self.device_flows[dst]['incoming'][flow_tuple].append(packet_data)
 
-
     def save_legend(self,handles, labels, name):
         fig = plt.figure()
         ax1 = fig.add_subplot(1, 1, 1)
@@ -279,7 +276,7 @@ class NetworkTrace:
     def device_flow_direction_signature(self, device_objs):
         import tools
         ax = tools.get_ax()
-        plot_name = 'input_flow_device_signature.png'
+        plot_name = 'flow_direction_signature.png'
         ax.set_xlabel("Mean traffic volume (bytes)")
         ax.set_ylabel("Standard deviation traffic volume (bytes)")
         ax.set_title("Device flow direction rate signature")
@@ -309,9 +306,9 @@ class NetworkTrace:
             if len(input_x) > 0 and len(input_y) > 0:
                 col = get_unique_colour()
                 ax.scatter(input_x, input_y, label=device_obj.device_name + ' inputs', color=col)
-            # if len(output_x) > 0 and len(output_y) > 0:
-            #     col = get_unique_colour()
-            #     ax.scatter(output_x, output_y, label=device_obj.device_name + ' ouputs', color=col)
+            if len(output_x) > 0 and len(output_y) > 0:
+                col = get_unique_colour()
+                ax.scatter(output_x, output_y, label=device_obj.device_name + ' ouputs', color=col)
 
         save_path = Path(self.save_folder) / str(self.file_name + plot_name)
         plt.savefig(str(save_path))

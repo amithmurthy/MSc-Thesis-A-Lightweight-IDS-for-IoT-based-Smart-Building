@@ -8,6 +8,7 @@ from collections import OrderedDict
 from scapy.all import *
 from scapy.layers.l2 import Ether
 from statistics import mean, stdev
+from sklearn.metrics import silhouette_score
 import klepto as kl
 from multiprocessing import Pool
 from copy import deepcopy
@@ -19,6 +20,7 @@ from tools import *
 import time
 from datetime import datetime
 from io import FileIO
+import timeit
 import pickle
 """ Functions for normalising data """
 
@@ -44,15 +46,18 @@ class ModelDevice:
         self.model_features = ['one_min_byte_count', 'one_min_pkt_count', 'two_min_byte_mean_10s', 'two_min_byte_mean_60s', 'two_min_std_10s', 'two_min_std_60s', 'four_min_mean_10s','four_min_std_10s',
                                'four_min_mean_60s', 'four_min_std_60s']
         self.sampling_rates = kwargs['sampling_rate'] if 'sampling_rate' in kwargs else get_sampling_rate()
-        self.time_scales = kwargs['time_scales'] if 'time_scales' in kwargs else None
+        self.time_scales = kwargs['time_scales'] if 'time_scales' in kwargs else [60,120,240]
         self.first_time_scale_features = {sampling_rate: {feature: [] for feature in self.first_time_scale_attributes} for sampling_rate in self.sampling_rates[self.time_scales[0]]}
         self.second_time_scale_features = {sampling_rate: {feature: [] for feature in self.features} for sampling_rate in self.sampling_rates[self.time_scales[1]]}
         self.third_time_scale_features = {sampling_rate: {feature: [] for feature in self.features} for sampling_rate in self.sampling_rates[self.time_scales[2]]}
         # self.fourth_time_scale_features = {sampling_rate: {feature: [] for feature in self.features} for sampling_rate in self.sampling_rates[self.time_scales[3]]}
-        self.device_folder = Path(r"C:\Users\amithmurthy\Documents\Uni\Masters\device_attributes") / device_name
-        self.training_data = Path(r"C:\Users\amithmurthy\Documents\Uni\Masters\device_attributes") / device_name / "benign_"
-        self.attack_data = Path(r"C:\Users\amithmurthy\Documents\Uni\Masters\device_attributes") / device_name / "attack_"
-        self.save_plot_path = Path(r"C:\Users\amithmurthy\Documents\Uni\Masters\Graphs\Machine Learning") / device_name
+        self.feature_set = kwargs["feature_set"]
+        self.window = kwargs['window']
+        self.s_rate = kwargs['sampling_window']
+        self.device_folder = Path(r"C:\Users\amith\Documents\Uni\Masters\device_attributes") / device_name
+        self.training_data = Path(r"C:\Users\amith\Documents\Uni\Masters\device_attributes") / device_name / self.feature_set/self.window/self.s_rate/"benign_"
+        self.attack_data = Path(r"C:\Users\amith\Documents\Uni\Masters\device_attributes") / device_name / self.feature_set/self.window/self.s_rate/"attack_"
+        self.save_plot_path = Path(r"C:\Users\amith\Documents\Uni\Masters\Graphs\Machine Learning") / device_name
         self.experiment = kwargs['experiment'] if 'experiment' in kwargs else "all"
         self.feature_map = {
             60: 'total_count',
@@ -65,8 +70,8 @@ class ModelDevice:
         self.internet_output_model = {feature: [] for feature in self.model_features}
         self.internet_model = {}
         self.local_model = {}
-        print(device_name)
         self.device_name = device_name
+        print(device_name, self.feature_set, self.window, self.s_rate)
         if model_function == 'preprocess':
             self.device_traffic = kwargs['device_traffic']
             self.data_type = kwargs['data_type'] if 'data_type' in kwargs else None
@@ -78,6 +83,7 @@ class ModelDevice:
             self.model_function = model_function
             if model_function == 'train':
                 self.train_type = kwargs['train_type'] if 'train_type' in kwargs else None
+                self.boundary = 99.7
                 self.create_clustering_model()
             elif model_function == 'anomaly_detection':
                 self.time_scale_anomalies = None
@@ -86,6 +92,8 @@ class ModelDevice:
                 self.file_device_traffic_duration = {}
                 self.relative_attack_timestamp = {}
                 self.attack_metadata = {}
+                self.test_instances = None
+                self.rel_attack_time_file_filter = []
                 self.anomaly_detection()
             elif model_function == 'validate':
                 self.anomaly_timestamp = {}
@@ -106,8 +114,6 @@ class ModelDevice:
             for feature in direction_model:
                 feature_name = name + feature
                 model[feature_name] = direction_model[feature]
-
-
 
     def get_time_scale_features(self, device_obj):
         """TODO: Abstraction for time_scale required. Currently, only processes two time_scales at a time. """
@@ -243,34 +249,12 @@ class ModelDevice:
                 traffic_model['four_min_std_10s'].append(four_min_features[10][window]['byte_count']['std'])
                 traffic_model['four_min_std_60s'].append(four_min_features[60][window]['byte_count']['std'])
 
-        # f = ['one_min_byte_count', 'one_min_pkt_count', 'two_min_byte_mean_10s', 'two_min_byte_mean_60s', 'two_min_std_10s', 'two_min_std_60s',
-        #      'four_min_mean_10s', 'four_min_std_10s','four_min_mean_60s', 'four_min_std_60s']
-
-
         merge_time_scale_features('local_inputs', self.local_input_model)
         merge_time_scale_features('local_outputs', self.local_output_model)
         merge_time_scale_features('internet_inputs', self.internet_input_model)
         merge_time_scale_features('internet_outputs', self.internet_output_model)
         self.set_location_model(self.local_model, self.local_input_model, self.local_output_model)
         self.set_location_model(self.internet_model, self.internet_input_model, self.internet_output_model)
-
-        # for sampling_rate in self.sampling_rates:
-        #     set_time_scale_attributes(sampling_rate)
-        #     device_obj.set_sampling_rate(sampling_rate)
-        #     device_obj.set_location_direction_rates()
-        #     for attribute in flows:
-        #         first_time_scale[sampling_rate][attribute] = device_obj.merge_byte_pkt_count(attribute, sliding_window=self.time_scales[0])
-        #         second_time_scale[sampling_rate][attribute] = device_obj.create_traffic_volume_features(attribute, w_window=self.time_scales[1])
-        #         third_time_scale[sampling_rate][attribute] = device_obj.create_traffic_volume_features(attribute, w_window=self.time_scales[2])
-        #         # fourth_time_scale[sampling_rate][attribute] = device_obj.create_traffic_volume_features(attribute, w_window=self.time_scales[3])
-        #     first_time_scale_feat = get_features(first_time_scale[sampling_rate])
-        #     second_time_scale_feat = get_features(second_time_scale[sampling_rate])
-        #     third_time_scale_feat = get_features(third_time_scale[sampling_rate])
-        #     # fourth_time_scale_feat = get_features(fourth_time_scale[sampling_rate])
-        #     set_features(first_time_scale_feat, self.first_time_scale_features[sampling_rate])
-        #     set_features(second_time_scale_feat, self.second_time_scale_features[sampling_rate])
-        #     set_features(third_time_scale_feat, self.third_time_scale_features[sampling_rate])
-            # set_features(fourth_time_scale_feat, self.fourth_time_scale_features[sampling_rate])
 
     def process_all_traffic(self):
         if self.saved_features is False:
@@ -304,71 +288,6 @@ class ModelDevice:
             self.plot_feature_correlation(self.second_time_scale_features, location, self.sampling_rates[0], directions[1], self.time_scales[1])
             # self.plot_feature_correlation(self.second_time_scale_features, location, self.sampling_rates[1], directions[0], self.time_scales[1])
             # self.plot_feature_correlation(self.second_time_scale_features, location, self.sampling_rates[1],directions[1], self.time_scales[1])
-
-
-    def compare_sampling_window(self, time_scale, location, w_window):
-        """time_scale = time_scale_features"""
-        fig = plt.figure()
-        ax = fig.add_subplot(1, 1, 1)
-        name = "Sliding window " + str(w_window) +location + self.data_type + " singature"
-        ax.set_title(name)
-        ax.set_xlabel("mean (bytes)")
-        ax.set_ylabel("standard deviation (bytes)")
-        sample_rate_1 = time_scale[self.sampling_rates[0]]
-        # sample_rate_2 = time_scale[self.sampling_rates[1]]
-        ax.scatter(sample_rate_1[location+'_inputs_mean_bytes'], sample_rate_1[location+'_inputs_std_bytes'], label= str(self.sampling_rates[0])+" "+location+' inputs', color='g', alpha=0.6)
-        # ax.scatter(sample_rate_2[location+'_inputs_mean_bytes'], sample_rate_2[location+'_inputs_std_bytes'], label= str(self.sampling_rates[1])+" "+location+' inputs', color='c', alpha=0.6)
-        ax.scatter(sample_rate_1[location+'_outputs_mean_bytes'], sample_rate_1[location+'_outputs_std_bytes'], label= str(self.sampling_rates[0])+" "+location+' outputs', color='r', alpha=0.6)
-        # ax.scatter(sample_rate_2[location+'_outputs_mean_bytes'], sample_rate_2[location+'_outputs_std_bytes'], label= str(self.sampling_rates[1])+" "+location+' outputs', color='b', alpha=0.6)
-        plt.legend(loc='best')
-        plt.savefig(str(self.save_plot_path / self.device_name) + name + ".png")
-        plt.show()
-
-    def plot_feature_correlation(self, time_scale_features, location, sampling_rate, direction, time_scale):
-        fig = plt.figure()
-        ax = fig.add_subplot(1,1,1)
-        name = str(time_scale) +" window" +" "+ str(sampling_rate) + " sampling rate"
-        ax.set_title(name)
-        ax.set_ylabel('Byte count (KB)')
-        ax.set_xlabel('Packet count')
-        save_path = self.save_plot_path / 'packet_size'
-        location_direction = ['local_inputs', 'local_outputs', 'internet_inputs', 'internet_outputs']
-        if save_path.is_dir() is False:
-            save_path.mkdir()
-            for x in location_direction:
-                save_folder = save_path / x
-                if save_folder.is_dir() is False:
-                    save_folder.mkdir()
-
-        def convert_to_KB(input_data):
-            return [x / 1000 for x in input_data]
-
-        ax.scatter(convert_to_KB(time_scale_features[sampling_rate][location+'_'+direction+'_mean_bytes']),
-                   convert_to_KB(time_scale_features[sampling_rate][location+'_'+direction+'_std_bytes']))
-        plt.savefig(str(self.save_plot_path/'packet_size'/ (location + '_'+ direction) / (name + '.png')))
-        plt.show()
-
-    def plot_attribute_cluster(self, time_scale_dict, sampling_rate):
-        fig = plt.figure()
-        ax = fig.add_subplot(1,1,1)
-        if time_scale_dict == "first":
-            time_scale = self.first_time_scale_features[sampling_rate]
-            w_window = str(self.time_scales[0])
-            name = self.device_name + " "+ w_window + " " + self.data_type
-        elif time_scale_dict == "second":
-            time_scale = self.second_time_scale_features[sampling_rate]
-            w_window = str(self.time_scales[1])
-            name = self.device_name +" "+ w_window + " " + self.data_type
-        ax.set_title(name+" signature")
-        ax.set_xlabel("mean (bytes)")
-        ax.set_ylabel("standard deviation (bytes)")
-        ax.scatter(time_scale['local_inputs_mean_bytes'], time_scale['local_inputs_std_bytes'], label="local inputs", color='r', alpha=0.6)
-        ax.scatter(time_scale['local_outputs_mean_bytes'], time_scale['local_outputs_std_bytes'], label="local outputs", color='b', alpha=0.6)
-        ax.scatter(time_scale['internet_inputs_mean_bytes'], time_scale['internet_inputs_std_bytes'], label='internet inputs', color='g', alpha=0.6)
-        ax.scatter(time_scale['internet_outputs_mean_bytes'], time_scale['internet_outputs_std_bytes'], label='internet outputs', color='c', alpha=0.6)
-        plt.legend(loc='best')
-        plt.savefig(str(self.save_plot_path / self.device_name) + name + str(sampling_rate) +"attributes.png")
-        plt.show()
 
     def normalise_time_scale(self, df, ts):
         file_path = Path(r"C:\Users\amithmurthy\Documents\Uni\Masters\device_attributes") / self.device_name / "kmeans-model"/ (str(ts) +'scaler.pkl')
@@ -439,7 +358,6 @@ class ModelDevice:
             str(save_path / (str(self.time_scales[-1]) + self.data_type + 'zscore_local.csv')))
         self.normalise_time_scale(internet_model, 'internet').to_csv(str(save_path / (str(self.time_scales[-1]) + self.data_type + 'standardScaler_internet.csv')))
         self.normalise_time_scale(local_model, 'local').to_csv(str(save_path / (str(self.time_scales[-1]) + self.data_type + 'standardScaler_local.csv')))
-
 
     def save_device_traffic_attributes(self):
         """Takes in one single device instance"""
@@ -527,21 +445,16 @@ class ModelDevice:
         # test = self.clean_dataset(df_second_time_zscore)
         # df_first_time_scale = clean_dataset(df_first_time_scale)
 
-
-    def  create_clustering_model(self):
+    def create_clustering_model(self):
         """TODO: Assign the timescale dataset to a variable i.e. which timescale dataset is being trained"""
         location_models = self.get_location_models()
-        # p = Pool(len(location_models.items()))
-        # print('time_scale_files', time_scale_files)
-        # p.map(self.train_time_scale_model, time_scale_files)
+        print(location_models)
         if self.experiment != 'all':
             for location in location_models:
                 self.train_time_scale_model(location, self.experiment)
         else:
             for location in location_models:
                 for file in location_models[location]:
-                    if file == '150s.csv' or file == '200s.csv':
-                        continue
                     self.train_time_scale_model(location,file)
 
     def train_time_scale_model(self, location, file):
@@ -551,16 +464,25 @@ class ModelDevice:
         df = pd.read_csv(str(dataset), index_col=0)
         if self.train_type == 'find_k':
             file_name = location + file
-            self.find_k(df, file_name)
+            if location == 'all':
+                self.find_k(df, file_name)
         else:
+            if 'all' in file:
+                location = 'all'
             self.save_model(df, file, location)
 
     def get_location_models(self):
-        location_model = {'internet':[], 'local':[]}
+        # location_model = {'internet': [], 'local': [],'all':[]}
+        location_model = {'all':[]}
         for location in location_model:
             training_data = Path(str(self.training_data)+location)
             for file in training_data.iterdir():
-                location_model[location].append(file.name)
+                if location == 'all':
+                    location_model[location].append(file.name)
+                else:
+                    if 'standard' not in file.name:
+                        continue
+                    location_model[location].append(file.name)
         return location_model
 
     def train_model(self, df, k_clusters):
@@ -568,13 +490,17 @@ class ModelDevice:
         df: csv in pd.DataFrame format
         inspection: optional argument to return cluster model for anomaly detection
         """
-        km_model = KMeans(n_clusters=k_clusters, init='random', n_init=10)
+        km_model = KMeans(n_clusters=k_clusters)
         data = df.values
         if self.model_function == 'anomaly_detection':
             model = self.km_model.fit(data)
             return model
         else:
+
+            start = timeit.default_timer()
             clusters = km_model.fit_predict(data)
+            stop = timeit.default_timer()
+            print("training time", stop - start)
             centroids = km_model.cluster_centers_
             # df['cluster'] = self.km_model.labels_
             # dist = sdist.cdist(data, centroids)
@@ -586,13 +512,18 @@ class ModelDevice:
             return km_model, cluster_boundary, cluster_distances
 
     def save_model(self, df, file, location):
-        time_scale = str(file)[:-4]
-        clusters = get_device_cluster(self.device_name, location, time_scale)
+        time_scale = self.window
+
+        clusters = get_device_cluster(self.device_name, location, self.feature_set, self.window, self.s_rate)
+
+        print('clusters',clusters)
         km_model, cluster_boundary, cluster_distances = self.train_model(df,clusters)
-        folder_name = self.device_folder / "kmeans-model" / location
+        folder_name = self.device_folder / "kmeans-model" / self.feature_set / self.window / self.s_rate
         if folder_name.is_dir() is False:
             folder_name.mkdir()
-        file_name = folder_name / time_scale
+        file_name = folder_name / location
+        if file_name.is_dir() is False:
+            file_name.mkdir()
         ar = kl.archives.dir_archive(name=file_name, serialized=True, cached=True, protocol=4)
         ar['cluster_model'] = km_model
         ar['cluster_boundary'] = cluster_boundary
@@ -601,7 +532,7 @@ class ModelDevice:
         ar.clear()
 
     def save_anomalies(self):
-        file_name = self.device_folder / "kmeans-model"
+        file_name = self.device_folder / "kmeans-model" / self.feature_set / self.window / self.s_rate
         ar = kl.archives.dir_archive(name=file_name, serialized=True, cached=True, protocol=4)
         ar['anomalies'] = self.time_scale_anomalies
         ar.dump()
@@ -616,17 +547,9 @@ class ModelDevice:
     def find_cluster_boundary(self, data, centroids, cluster_labels):
         cluster_distances = {i: [] for i in range(len(centroids))}
         test = {}
-        # for i, (cx, cy, cz) in enumerate(centroids):
-        #     if i not in test:
-        #         test[i] = self.get_instance_distance_points(data, cx, cy, cz, i, cluster_labels)
-            # centroid_distances[i].extend(distance)
-
-        # for i_centroid in enumerate(centroids):
-        #     cluster_distances[i_centroid] = sdist.cdist(data[cluster_labels == i_centroid], i_centroid)
         df = pd.DataFrame({'cluster': cluster_labels})
-
         dists = pd.DataFrame(
-            sdist.cdist(data, centroids),
+            sdist.cdist(data, centroids, metric='euclidean'),
             columns=['dist_{}'.format(i) for i in range(len(centroids))],
             index=df.index)
         df = pd.concat([df, dists], axis=1)
@@ -643,99 +566,106 @@ class ModelDevice:
         if self.model_function == 'anomaly_detection':
             return cluster_distances
         else:
-            cluster_boundary = {centroid: np.percentile(np.array(cluster_distances[centroid]), 97.5) for centroid in
+            cluster_boundary = {centroid: np.percentile(np.array(cluster_distances[centroid]), self.boundary) for centroid in
                                 cluster_distances}
-            print(cluster_boundary)
+            # print(cluster_boundary)
             return cluster_boundary, cluster_distances
 
     def anomaly_detection(self):
         self.get_benign_model()
-        self.time_scale_anomalies = {location: {time_scale: {'anomalies':[], 'anomaly_index':[]} for time_scale in self.benign_model[location]} for location in self.benign_model}
-        # p = Pool(len(self.benign_model.keys()))
-        # p.map(self.inspect_traffic, self.benign_model.keys())
+        self.time_scale_anomalies = {location: {'anomalies': [], 'anomaly_index': []} for location in self.benign_model}
         for location in self.benign_model:
-            for time_scale in self.benign_model[location]:
-                if time_scale != '180s':
-                    continue
-                self.inspect_traffic(time_scale, location)
+            if location != 'all':
+                continue
+            self.inspect_traffic(location)
         self.save_anomalies()
         self.validate_anomalies()
-        # print(self.time_scale_anomalies['250s'])
-        # print(self.time_scale_anomalies['500s'])
 
-    def inspect_traffic(self, time_scale, location):
+    def inspect_traffic(self, location):
         """Cluster boundary for time_scale model are the arguments"""
-        print("inspecting", location, time_scale)
-        benign_data = self.device_folder / ("benign_"+location) / (str(time_scale) + '.csv')
-        attack_file = self.device_folder / ("attack_"+location) / (str(time_scale) + '.csv')
-
-        benign_df = pd.read_csv(str(benign_data))
+        print("inspecting", location)
+        benign_path = Path(str(self.training_data) + location)
+        attack_path = Path(str(self.attack_data) + location)
+        for file in attack_path.iterdir():
+            attack_file = file.name
+            print(file)
+        for file in benign_path.iterdir():
+            benign_data = file.name
+        print("test file", attack_file)
+        benign_df = pd.read_csv(str(benign_path / benign_data))
         # test = KMeans(n_clusters=5)
         # test_x = test.fit(benign_df.values)
-        inspect_df = pd.read_csv(str(attack_file), index_col=0)
+        inspect_df = pd.read_csv(str(attack_path/attack_file), index_col=0)
+        self.test_instances = len(inspect_df)
         inspect_data = inspect_df.values
         # attack_centroids = test.fit_predict(inspect_data)
         # print("attack", test.cluster_centers_.shape)
-        benign_cluster_model = self.benign_model[location][time_scale]['cluster_model']
+        benign_cluster_model = self.benign_model[location]['cluster_model']
         # self.validate_model(benign_cluster_model, time_scale)
-        print(attack_file)
         # X_test = benign_cluster_model.transform(inspect_data)
+
+        start = timeit.default_timer()
         results = benign_cluster_model.predict(inspect_data)
-        print("predicted attack data")
+        end = timeit.default_timer()
+        print('predicting time', end-start)
+        # print("predicted attack data")
         # cluster_points_distances = self.find_cluster_boundary(inspect_data, benign_cluster_model.cluster_centers_, results)
-        cluster_points_distances = self.find_cluster_boundary(inspect_data, self.benign_model[location][time_scale]['benign_centroids'], results)
+        cluster_points_distances = self.find_cluster_boundary(inspect_data, self.benign_model[location]['benign_centroids'], results)
+        """Cluster map => instance index to its respective cluster"""
         cluster_map = pd.DataFrame()
         cluster_map['data_index'] = inspect_df.index.values
         cluster_map['cluster'] = results
-        cluster_map.to_csv(str(self.device_folder/time_scale)+"index_data_clusters.csv")
-        cluster_boundary = self.benign_model[location][time_scale]['cluster_boundary']
-        self.find_anomalies(location, time_scale, cluster_boundary, cluster_points_distances, cluster_map)
+        cluster_map.to_csv(str(self.device_folder/self.window)+"index_data_clusters.csv")
+        cluster_boundary = self.benign_model[location]['cluster_boundary']
+        self.find_anomalies(location, cluster_boundary, cluster_points_distances, cluster_map)
 
-    def find_anomalies(self, location, time_scale, cluster_boundary, cluster_distances, cluster_map):
+    def find_anomalies(self, location, cluster_boundary, cluster_distances, cluster_map):
         # print(time_scale,location, 'boundaries', cluster_boundary)
         j = 0
+        start = timeit.default_timer()
         for centroid in cluster_distances:
             # print(time_scale, 'distances',  cluster_distances[centroid])
             # print('centroid', centroid, 'boundary', cluster_boundary[centroid])
             centroid_data_index = list(cluster_map[cluster_map.cluster == centroid].data_index.values)
             i = 0
-            if time_scale == '150s' or time_scale == '200s':
-                print(time_scale," boundary outlier detection")
             for instance in cluster_distances[centroid]:
                 if float(instance) > float(cluster_boundary[centroid]):
                     j += 1
-                    self.time_scale_anomalies[location][time_scale]['anomalies'].append(instance)
-                    self.time_scale_anomalies[location][time_scale]['anomaly_index'].append(centroid_data_index[i])
+                    self.time_scale_anomalies[location]['anomalies'].append(instance)
+                    self.time_scale_anomalies[location]['anomaly_index'].append(centroid_data_index[i])
                 i += 1
-        print(time_scale, location, 'anomalies',j)
+        end = timeit.default_timer()
+        print('anomaly detection time', end- start)
+        print(location, 'anomalies',j)
 
-
-
-    def validate_anomalies(self):
+    def  validate_anomalies(self):
         """TODO: Need to save anomaly outputs and extract for each experiment before running validation - requires methods"""
         self.correlate_index_timestamp()
         # extract attack annotations timestamp
-        self.attack_annotations()
+        if self.device_name != "Light Bulbs LiFX Smart Bulb":
+            self.attack_annotations()
+        else:
+            self.relative_attack_timestamp, self.attack_metadata = get_lifx_annotations()
         self.reconstruct_device_activity()
-        if self.validate_device_activity() is True:
-            self.convert_annotations_to_timescale_index()
+        # if self.validate_device_activity() is True:
+        self.convert_annotations_to_timescale_index()
             # self.link_annotations_and_output()
 
     def validate_device_activity(self):
         # Validate total device duration in dataset
-        csv_file_duration = self.get_total_device_time('300s')
+        csv_file_duration = self.get_total_device_time(int(self.window))
         last_file = list(self.relative_attack_timestamp.keys())[-1]
         pcap_duration = 0
         for i in self.file_device_traffic_duration:
             pcap_duration += self.file_device_traffic_duration[i]
-        if csv_file_duration - pcap_duration < 1000:
+        if csv_file_duration - pcap_duration < (int(self.window) * 3):
             print("device time stamp matches")
         return True
 
     def convert_annotations_to_timescale_index(self):
         print("convert annotations to time scale index")
 
-        time_scale_anomaly_index = {location: {time_scale: [] for time_scale in self.time_scale_anomalies[location]} for location in self.time_scale_anomalies}
+        time_scale_anomaly_index = {location: [] for location in self.time_scale_anomalies}
         global_attack_timestamp = []
 
         def increment_device_time(file):
@@ -749,6 +679,13 @@ class ModelDevice:
                     total_device_time += self.file_device_traffic_duration[files[i]]
                 return total_device_time
 
+
+        attack_window_instances = 0
+        meta_data_keys = list(self.attack_metadata.keys())
+        attack_type_instances = {}
+
+        # print(self.relative_attack_timestamp.items())
+        # print(len(self.attack_metadata))
         for file in self.relative_attack_timestamp:
             device_duration = increment_device_time(file)
             # print('device_duration', device_duration)
@@ -756,10 +693,22 @@ class ModelDevice:
             for rel_attack_time in self.relative_attack_timestamp[file]:
                 start = int(device_duration + rel_attack_time[0])
                 end = int(device_duration + rel_attack_time[1])
-                print((start, end))
+                # print((start, end))
                 global_attack_timestamp.append((start, end))
+                duration = end - start
+                attack_len = math.ceil(duration / int(self.window))
+                attack_window_instances += attack_len
+                attack_type = self.attack_metadata[rel_attack_time]['attack_type']
+                if attack_type in attack_type_instances:
+                    attack_type_instances[attack_type]['count'] += attack_len
+                    attack_type_instances[attack_type]['timestamp'].append((start, end))
+                else:
+                    attack_type_instances[attack_type] = {'count': 0, 'detected': 0, 'timestamp': [(start, end)]}
+                    attack_type_instances[attack_type]['count'] += attack_len
 
-
+        print(attack_window_instances)
+        # print(attack_type_instances.keys())
+        # print(attack_type_instances)
         def ts_index_range(attack_timestamp, time_scale):
             time_scale = int(time_scale[:-1])
             start_i, end_i = int((attack_timestamp[0] / time_scale) - 1), int((attack_timestamp[1] / time_scale) - 1)
@@ -774,7 +723,7 @@ class ModelDevice:
         #     t = int(ts[:-1])
         # rel_time = [500 * i for i in time_scale_anomaly_index['500s']]
 
-        tp = 0
+        # tp = 0
         total = 0
         # print(global_attack_timestamp)
         # print(len(rel_time))
@@ -783,32 +732,104 @@ class ModelDevice:
         #     int_anomalies.append(int(time))
 
         # print('300s anomalies', int_anomalies)
-        tp_anomalies = {location:{ts:[] for ts in self.time_scale_anomalies[location]} for location in self.time_scale_anomalies}
-        meta_data_keys = list(self.attack_metadata.keys())
-        for location in self.time_scale_anomalies:
-            for ts in self.anomaly_timestamp[location]:
-                print(ts, len(self.anomaly_timestamp[location][ts]))
-                for anomaly in self.anomaly_timestamp[location][ts]:
-                    i = 0
-                    for attack_ts in global_attack_timestamp:
-                        if attack_ts[0] <= anomaly <= attack_ts[1]:
-                            tp += 1
-                            tp_anomalies[location][ts].append((int(anomaly), self.attack_metadata[meta_data_keys[i]]['attack_type']))
-                        i += 1
-        for location in tp_anomalies:
-            print(location)
-            # print(tp_anomalies[ts])
-            for ts in tp_anomalies[location]:
-                if ts == '50s' or ts == '100s':
-                    continue
-                total = len(self.anomaly_timestamp[location][ts])
-                tp = len(tp_anomalies[location]['50s'])
-                print('len of identified', tp)
-                print('TP:',  tp / total)
-                print('FP:', (total - tp) / total)
-                print(tp_anomalies['internet'][ts])
-        # print()
+        tp_anomalies = {location: [] for location in self.time_scale_anomalies}
 
+        for location in self.time_scale_anomalies:
+            for anomaly in self.anomaly_timestamp[location]:
+                for attack_ts in global_attack_timestamp:
+                    if attack_ts[0] <= anomaly <= attack_ts[1]:
+                        # get attack type
+                        attack = None
+                        for attack_name in attack_type_instances:
+                            for timestamp in attack_type_instances[attack_name]['timestamp']:
+                                if attack is None:
+                                    if attack_ts == timestamp:
+                                        attack = attack_name
+                                else:
+                                    continue
+                        # if attack is None:
+                        #     print(attack_ts, anomaly)
+                        tp_anomalies[location].append((int(anomaly), attack))
+
+        for location in tp_anomalies:
+            for anomaly in tp_anomalies[location]:
+                attack_type_instances[anomaly[1]]['detected'] += 1
+
+
+        anomalies = attack_window_instances
+        negatives = self.test_instances - anomalies
+        output = len(self.anomaly_timestamp['all'])
+        tp = len(tp_anomalies['all'])
+        fp = output - tp
+        fn = anomalies - tp
+        tn = negatives - (fn + fp)
+        fpr = ((fp / (fp + tn)) * 100)
+        accuracy = ((tp + tn) / (tp + tn + fp + fn)) * 100
+        print('accuracy', accuracy)
+        print('FPR', fpr)
+        # print(attack_type_instances)
+        print('tp', tp)
+        print("TP attack instances", (tp/output) * 100)
+        print("TP benign instances", (tn / negatives) * 100)
+        results = {}
+        for attack_key in attack_type_instances:
+            results[attack_key] = {'count': int(attack_type_instances[attack_key]['count']), 'detected': int(attack_type_instances[attack_key]['detected']), 'detection_rate': None}
+            results[attack_key]['detection_rate'] = (int(attack_type_instances[attack_key]['detected']) / int(attack_type_instances[attack_key]['count'])) * 100
+
+        total_rate = 0
+        for i in results:
+            if 'Icmp' in results or "smurf" in results or "Ping" in results:
+                continue
+            total_rate += results[i]['detection_rate']
+
+        filter = []
+        for i in results:
+            if 'Icmp' in i or 'smurf' in i or "Ping" in i:
+                if 'ping' in results:
+                    print(i)
+                continue
+            else:
+                filter.append(i)
+
+        avg_detection_rate = total_rate / len(filter)
+
+        def save_results():
+            import csv
+            fields = ['attack', 'count', 'detected', 'detection_rate']
+            save_csv = Path(r"C:\Users\amith\Documents\Uni\Masters\results") / self.device_name/self.feature_set / self.window / self.s_rate
+            type = get_device_type(self.device_name)
+            save_device_type_results = Path(r'C:\Users\amith\Documents\Uni\Masters\results\device_type\sampling window')
+            with open(str(save_csv / 'detection_results.csv'), 'w') as f:
+                w = csv.DictWriter(f, fields)
+                for key, val in sorted(results.items()):
+                    row = {'attack': key}
+                    row.update(val)
+                    w.writerow(row)
+
+            metrics = {'True Positives':None, 'False Positives':None, 'True Negatives':None, 'False Negatives':None, "FPR":None, "TP attack":None, "TP benign":None, 'N':None, 'accuracy':None, 'average detection rate':None}
+            metrics['True Positives'] = tp
+            metrics['False Positives'] = fp
+            metrics['True Negatives'] = tn
+            metrics['False Negatives'] = fn
+            metrics['FPR'] = fpr
+            metrics['TP attack'] = (tp/output) * 100
+            metrics['TP benign'] = (tn / negatives) * 100
+            metrics['N'] = self.test_instances
+            metrics['accuracy'] = accuracy
+            metrics['average detection rate'] = avg_detection_rate
+            with open(str(save_csv/'model_accuracy.csv'), 'w') as c:
+                dw = csv.writer(c)
+                for key, value in metrics.items():
+                    dw.writerow([key, value])
+
+            with open(str(save_device_type_results / (self.device_name + self.s_rate+ ".csv")), 'w') as fd:
+                wc = csv.writer(fd)
+                for key, value in metrics.items():
+                    wc.writerow([key, value])
+
+            print("SAVED RESULTS")
+
+        save_results()
 
     def link_annotations_and_output(self):
         pass
@@ -847,12 +868,16 @@ class ModelDevice:
             if start_date == end_date:
                 nest_metadata(start_date, (datetime.utcfromtimestamp(start_epoch).strftime('%H:%M:%S'), datetime.utcfromtimestamp(end_epoch).strftime('%H:%M:%S')), start_epoch)
             else:
-                print('different dates', start_epoch)
+                print('attack annotations different dates', start_epoch)
                 nest_metadata(start_date, (datetime.utcfromtimestamp(start_epoch).strftime('%H:%M:%S'), "23:59:59"), start_epoch)
                 nest_metadata(end_date, ("00:00:00", datetime.utcfromtimestamp(end_epoch).strftime('%H:%M:%S')), start_epoch)
 
+        # if self.device_name == "Light Bulbs LiFX Smart Bulb":
+        #     self.link_file_device_time()
+        # else:
         device_first_pkt = self.get_attack_file_first_pkt_epoch(attacks)
         self.get_relative_attack_timestamps(device_first_pkt, attacks)
+        # print("rel_attack_timestamp struct", self.relative_attack_timestamp)
         #Link relative time to metadata
         for date in self.relative_attack_timestamp:
             relative_timestamps = self.relative_attack_timestamp[date]
@@ -869,6 +894,8 @@ class ModelDevice:
         for file in device_first_pkt:
             # print('first pkt time in file', device_first_pkt[file])
             # print('attack timestamps in file', attack_times[file])
+            if file in self.rel_attack_time_file_filter:
+                continue
             self.relative_attack_timestamp[file] = []
             first_pkt_time = datetime.strptime(device_first_pkt[file], '%H:%M:%S')
             attack_timestamps = list(attack_times[file].keys())
@@ -898,36 +925,101 @@ class ModelDevice:
                     # print(pkt_date, "20" + pcap.name[:-5])
                     assert pkt_date == ("20" + pcap.name[:-5])
                 except AssertionError:
+                    self.rel_attack_time_file_filter.append(pcap.name[:-5])
+                    print(self.rel_attack_time_file_filter)
                     print("First pkt date is different to file")
                     print("pkt date", pkt_date)
                     print("file", pcap.name)
                 # print('test', datetime.utcfromtimestamp(first_pkt_epoch).strftime('%H:%M:%S'))
         return first_pkt_time
 
+    def link_file_device_time(self):
+        def get_first_pkt_time(device_obj):
+            smallest_time = None
+            for direction in device_obj.flows:
+                for flow in device_obj.flows[direction]:
+                    start_pkt = device_obj.flows[direction][flow][0]['relative_timestamp']
+                    if smallest_time is None:
+                        smallest_time = start_pkt
+                    else:
+                        if start_pkt < smallest_time:
+                            smallest_time = start_pkt
+                        else:
+                            continue
+            return smallest_time
+
+        def map_ordinal_rel_time(file, attack_ordinals, device_obj):
+            ordinal_time_map = {ordinal: None for ordinal in [element for tupl in attack_ordinals for element in tupl]}
+            # print(ordinal_time_map)
+            for direction in device_obj.flows:
+                flow_table = device_obj.flows[direction] # Easier readibility. direction flow table
+                for flow in flow_table:
+                    for pkt in flow_table[flow]:
+                        if pkt['ordinal'] in ordinal_time_map:
+                            ordinal_time_map[pkt['ordinal']] = pkt['relative_timestamp']
+            return ordinal_time_map
+
+
+        processed_attack_traffic = r"D:\New back up\Takeout\Drive\UNSW device traffic\Attack"
+        # Get relative ordinals of attack start, end for attack in file
+        attack_file_ordinals = attack_ordinals(self.device_name)
+        f = [str("_"+file) for file in attack_file_ordinals]
+        print("attack ordinal file names", attack_file_ordinals.keys())
+        # Get device traffic from these files
+        network_instance = unpickle_network_trace_and_device_obj(processed_attack_traffic, devices=self.device_name, files=f)
+
+        for network_obj in network_instance:
+            file_rel_pkt_time = None
+            for device_obj in network_instance[network_obj]:
+                file_rel_pkt_time = get_first_pkt_time(device_obj)
+                # Find and set rel_attack time
+                attack_file_name = network_obj.file_name[:-5]
+                print("attack file", attack_file_name)
+                self.relative_attack_timestamp[attack_file_name] = []
+                ordinal_time = map_ordinal_rel_time(attack_file_name,attack_file_ordinals[attack_file_name], device_obj)
+                for attack_ordinal in attack_file_ordinals[attack_file_name]:
+                    if ordinal_time[attack_ordinal[0]] is not None or ordinal_time[attack_ordinal[1]] is not None:
+                        start = ordinal_time[attack_ordinal[0]]
+                        end = ordinal_time[attack_ordinal[1]]
+                        rel_start = start - file_rel_pkt_time
+                        rel_end = end - file_rel_pkt_time
+                        print('ordinal timestamp', attack_ordinal, (rel_start, rel_end))
+                        self.relative_attack_timestamp[attack_file_name].append((rel_start, rel_end))
+                    else:
+                        print('No timestamp ordianls', attack_ordinal)
+        print(self.relative_attack_timestamp)
+
+
+
     def read_pcap(self, pcap_file):
         device_filter = get_mac_addr(self.device_name)
-        count = 0
-        print('reading',pcap_file)
-        for pkt_data, pkt_metadata in RawPcapReader(pcap_file):
-            count += 1
-            ether_pkt = Ether(pkt_data)
-            if ether_pkt.src == device_filter or ether_pkt.dst == device_filter:
-                # print('pkt ordinal', count)
-                return ((pkt_metadata.tshigh << 32) | pkt_metadata.tslow) / pkt_metadata.tsresol
-            else:
-                continue
+        if self.device_name == "iHome" and "18-10-22.pcap" in str(pcap_file.name) :
+            print('getting epoch from tools.py')
+            return ihome_first_pkt_ordinal("18-10-22.pcap")
+        else:
+            count = 0
+            print('reading',pcap_file)
+            for pkt_data, pkt_metadata in RawPcapReader(pcap_file):
+                count += 1
+                ether_pkt = Ether(pkt_data)
+                if ether_pkt.src == device_filter or ether_pkt.dst == device_filter:
+                    # print('pkt ordinal', count)
+                    return ((pkt_metadata.tshigh << 32) | pkt_metadata.tslow) / pkt_metadata.tsresol
+                else:
+                    continue
 
     def correlate_index_timestamp(self):
         for location in self.time_scale_anomalies:
-            for time_scale in self.time_scale_anomalies[location]:
-                # total_device_time = self.get_total_device_time(time_scale)
-                # print(time_scale, 'total duration', total_device_time)
-                # Data structure to store anomaly timestamp (anomaly_timestamp) is intiated
-                self.anomaly_timestamp[location] = {ts:[] for ts in self.time_scale_anomalies[location]}
-                for centroid in self.time_scale_anomalies[location][time_scale]:
-                    for anomaly_index in self.time_scale_anomalies[location][time_scale][centroid]:
-                        anomaly_timestamp = (anomaly_index + 1) * int(time_scale[:-1])
-                        self.anomaly_timestamp[location][time_scale].append(anomaly_timestamp)
+            # total_device_time = self.get_total_device_time(time_scale)
+            # print(time_scale, 'total duration', total_device_time)
+            # Data structure to store anomaly timestamp (anomaly_timestamp) is intiated
+            self.anomaly_timestamp[location] = []
+            for centroid in self.time_scale_anomalies[location]:
+                if centroid != 'anomaly_index':
+                    continue
+                for anomaly_index in self.time_scale_anomalies[location][centroid]:
+                    anomaly_timestamp = (anomaly_index + 1) * int(self.window)
+                    self.anomaly_timestamp[location].append(anomaly_timestamp)
                         # self.anomaly_timestamp[time_scale].append(anomaly_index)
             # print(time_scale, 'anomaly timestamp', self.anomaly_timestamp[time_scale])
 
@@ -936,32 +1028,42 @@ class ModelDevice:
         file_in = self.device_folder / (str(time_scale) + "index_data_clusters.csv")
         cluster_map = pd.read_csv(str(file_in))
         last_index = list(cluster_map.data_index.values)[-1]
-        return (last_index + 1) * int(time_scale[:-1])
+        return (last_index + 1) * time_scale
 
     def get_benign_model(self):
-        saved_model = self.device_folder / "kmeans-model"
+        saved_model = self.device_folder / "kmeans-model" / self.feature_set / self.window / self.s_rate
         time_scale_boundary = {}
+        locations = ['all', 'internet', 'local']
+        # locations = ['all']
         # time_scale_boundary = {time_scale.name: None for time_scale in saved_model.iterdir()}
         # self.benign_distances = {time_scale.name: None for time_scale in saved_model.iterdir()}
         for model in saved_model.iterdir():
             # Folder names greater than len 4 are not km model
-            if 'internet' not in model.name and 'local' not in model.name:
+            # if 'internet' not in model.name and 'local' not in model.name:
+            #     continue
+            if model.name not in locations:
                 continue
-            print(model.name)
-            location = 'internet' if 'internet' in model.name else 'local'
-            for time_scale_model in model.iterdir():
-                db = saved_model / location / time_scale_model.name
-                d = kl.archives.dir_archive(name=db, serialized=True)
-                d.load('cluster_boundary')
-                d.load('cluster_distances')
-                d.load('cluster_model')
-                # time_scale_boundary[time_scale.name] = d['cluster_boundary']
-                # model_features = ['cluster_model', 'cluster_distances', 'cluster_boundary']
-                self.benign_model[location][time_scale_model.name] = {}
-                self.benign_model[location][time_scale_model.name]['cluster_model'] = d['cluster_model']
-                self.benign_model[location][time_scale_model.name]['benign_distances'] = d['cluster_distances']
-                self.benign_model[location][time_scale_model.name]['benign_centroids'] = d['cluster_model'].cluster_centers_
-                self.benign_model[location][time_scale_model.name]['cluster_boundary'] = d['cluster_boundary']
+            # print(model.name)
+            # location = 'internet' if 'internet' in model.name else 'local'
+            if 'internet' in model.name:
+                location = 'internet'
+            elif 'local' in model.name:
+                location = 'local'
+            elif 'all' in model.name:
+                location = 'all'
+            # for time_scale_model in model.iterdir():
+            db = saved_model / location
+            d = kl.archives.dir_archive(name=db, serialized=True)
+            d.load('cluster_boundary')
+            d.load('cluster_distances')
+            d.load('cluster_model')
+            # time_scale_boundary[time_scale.name] = d['cluster_boundary']
+            # model_features = ['cluster_model', 'cluster_distances', 'cluster_boundary']
+            self.benign_model[location] = {}
+            self.benign_model[location]['cluster_model'] = d['cluster_model']
+            self.benign_model[location]['benign_distances'] = d['cluster_distances']
+            self.benign_model[location]['benign_centroids'] = d['cluster_model'].cluster_centers_
+            self.benign_model[location]['cluster_boundary'] = d['cluster_boundary']
         # print(time_scale_boundary)
         # print('time_scale_boundary', time_scale_boundary)
         # return time_scale_boundary
@@ -978,21 +1080,121 @@ class ModelDevice:
 
     def find_k(self, df, file):
         print('finding K', file)
+        save_path = Path(r"C:\Users\amith\Documents\Uni\Masters\Graphs\k") / self.device_name / self.feature_set/self.window/(self.s_rate+'s')
+        print(self.training_data)
         x = df.values
-        K = range(2,20)
+        K = [2**x for x in range(2,8)]
+        # K = [2, 4, 6, 8, 10, 12, 14, 16, 18, 20, 22, 24, 26, 28, 30]
+        print(K)
         inertia = []
         for k in K:
-            km = KMeans(n_clusters=k, init="random",n_init=10)
+            km = KMeans(n_clusters=k)
             km = km.fit(x)
             inertia.append(km.inertia_)
         plt.plot(K, inertia, 'bx-')
-        plt.xlabel('k')
+        plt.xlabel('Number of clusters')
         plt.ylabel('Inertia')
-        plt.title(file+'Elbow method')
-        plt.savefig(str(self.save_plot_path / file)+'elbowmethod.png')
+        # time_scale = re.search('(.+?)b', str(file)).group(1)
+        time_scale = '4 min'
+        # location = 'internet' if 'internet' in str(file) else 'local'
+        location = 'all'
+        name = location + " model" + " "
+        plt.title(name)
+        plt.savefig(str(save_path / name)+'elbowmethod2.png')
         print("elbow method printed in machine learning plot folder")
         plt.show()
         # print(inertia)
+        self.compute_silhouette_score(df, name)
+
+    def compute_silhouette_score(self, df, name):
+        # if self.device_name == 'Belkin Wemo switch':
+        #     K = list(i for i in range(2,41))
+        # else:
+        K = [2**x for x in range(2,10)]
+        # K = [2, 4, 6, 8, 10, 12, 14, 16, 18, 20, 22, 24, 26, 28, 30]
+        # K = range(2,50)
+        x = df.values
+        save_path = Path(r"C:\Users\amith\Documents\Uni\Masters\Graphs\k") / self.device_name / self.feature_set/self.window/(self.s_rate + 's')
+        scores = []
+        for k in K:
+            k_model = KMeans(n_clusters=k).fit(x)
+            label = k_model.labels_
+            sil_coeff = silhouette_score(x, label, metric='euclidean')
+            scores.append(sil_coeff)
+            # print("For n_clusters={}, The Silhouette Coefficient is {}".format(k, sil_coeff))
+        fig = plt.figure()
+        ax = fig.add_subplot(1,1,1)
+        ax.plot(K, scores, 'bx-')
+        ax.set_xlabel('Number of clusters')
+        ax.set_ylabel("silhoutte score")
+        t = name + " silhouette scores"
+        ax.set_title(t)
+        plt.savefig(str(save_path / name) + 'silhouette.png')
+        plt.show()
+
+    def compare_sampling_window(self, time_scale, location, w_window):
+        """time_scale = time_scale_features"""
+        fig = plt.figure()
+        ax = fig.add_subplot(1, 1, 1)
+        name = "Sliding window " + str(w_window) +location + self.data_type + " singature"
+        ax.set_title(name)
+        ax.set_xlabel("mean (bytes)")
+        ax.set_ylabel("standard deviation (bytes)")
+        sample_rate_1 = time_scale[self.sampling_rates[0]]
+        # sample_rate_2 = time_scale[self.sampling_rates[1]]
+        ax.scatter(sample_rate_1[location+'_inputs_mean_bytes'], sample_rate_1[location+'_inputs_std_bytes'], label= str(self.sampling_rates[0])+" "+location+' inputs', color='g', alpha=0.6)
+        # ax.scatter(sample_rate_2[location+'_inputs_mean_bytes'], sample_rate_2[location+'_inputs_std_bytes'], label= str(self.sampling_rates[1])+" "+location+' inputs', color='c', alpha=0.6)
+        ax.scatter(sample_rate_1[location+'_outputs_mean_bytes'], sample_rate_1[location+'_outputs_std_bytes'], label= str(self.sampling_rates[0])+" "+location+' outputs', color='r', alpha=0.6)
+        # ax.scatter(sample_rate_2[location+'_outputs_mean_bytes'], sample_rate_2[location+'_outputs_std_bytes'], label= str(self.sampling_rates[1])+" "+location+' outputs', color='b', alpha=0.6)
+        plt.legend(loc='best')
+        plt.savefig(str(self.save_plot_path / self.device_name) + name + ".png")
+        plt.show()
+
+    def plot_feature_correlation(self, time_scale_features, location, sampling_rate, direction, time_scale):
+        fig = plt.figure()
+        ax = fig.add_subplot(1,1,1)
+        name = str(time_scale) +" window" +" "+ str(sampling_rate) + " sampling rate"
+        ax.set_title(name)
+        ax.set_ylabel('Byte count (KB)')
+        ax.set_xlabel('Packet count')
+        save_path = self.save_plot_path / 'packet_size'
+        location_direction = ['local_inputs', 'local_outputs', 'internet_inputs', 'internet_outputs']
+        if save_path.is_dir() is False:
+            save_path.mkdir()
+            for x in location_direction:
+                save_folder = save_path / x
+                if save_folder.is_dir() is False:
+                    save_folder.mkdir()
+
+        def convert_to_KB(input_data):
+            return [x / 1000 for x in input_data]
+
+        ax.scatter(convert_to_KB(time_scale_features[sampling_rate][location+'_'+direction+'_mean_bytes']),
+                   convert_to_KB(time_scale_features[sampling_rate][location+'_'+direction+'_std_bytes']))
+        plt.savefig(str(self.save_plot_path/'packet_size'/ (location + '_'+ direction) / (name + '.png')))
+        plt.show()
+
+    def plot_attribute_cluster(self, time_scale_dict, sampling_rate):
+        fig = plt.figure()
+        ax = fig.add_subplot(1,1,1)
+        if time_scale_dict == "first":
+            time_scale = self.first_time_scale_features[sampling_rate]
+            w_window = str(self.time_scales[0])
+            name = self.device_name + " "+ w_window + " " + self.data_type
+        elif time_scale_dict == "second":
+            time_scale = self.second_time_scale_features[sampling_rate]
+            w_window = str(self.time_scales[1])
+            name = self.device_name +" "+ w_window + " " + self.data_type
+        ax.set_title(name+" signature")
+        ax.set_xlabel("mean (bytes)")
+        ax.set_ylabel("standard deviation (bytes)")
+        ax.scatter(time_scale['local_inputs_mean_bytes'], time_scale['local_inputs_std_bytes'], label="local inputs", color='r', alpha=0.6)
+        ax.scatter(time_scale['local_outputs_mean_bytes'], time_scale['local_outputs_std_bytes'], label="local outputs", color='b', alpha=0.6)
+        ax.scatter(time_scale['internet_inputs_mean_bytes'], time_scale['internet_inputs_std_bytes'], label='internet inputs', color='g', alpha=0.6)
+        ax.scatter(time_scale['internet_outputs_mean_bytes'], time_scale['internet_outputs_std_bytes'], label='internet outputs', color='c', alpha=0.6)
+        plt.legend(loc='best')
+        plt.savefig(str(self.save_plot_path / self.device_name) + name + str(sampling_rate) +"attributes.png")
+        plt.show()
 
     def clean_dataset(self, df):
         df.dropna(inplace=True)
