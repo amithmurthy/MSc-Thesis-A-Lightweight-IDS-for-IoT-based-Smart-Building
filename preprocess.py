@@ -20,6 +20,7 @@ from tools import *
 import time
 from datetime import datetime
 from io import FileIO
+import timeit
 import pickle
 """ Functions for normalising data """
 
@@ -495,7 +496,11 @@ class ModelDevice:
             model = self.km_model.fit(data)
             return model
         else:
+
+            start = timeit.default_timer()
             clusters = km_model.fit_predict(data)
+            stop = timeit.default_timer()
+            print("training time", stop - start)
             centroids = km_model.cluster_centers_
             # df['cluster'] = self.km_model.labels_
             # dist = sdist.cdist(data, centroids)
@@ -508,10 +513,9 @@ class ModelDevice:
 
     def save_model(self, df, file, location):
         time_scale = self.window
-        start = time.time()
+
         clusters = get_device_cluster(self.device_name, location, self.feature_set, self.window, self.s_rate)
-        end = time.time()
-        print("training time", end - start)
+
         print('clusters',clusters)
         km_model, cluster_boundary, cluster_distances = self.train_model(df,clusters)
         folder_name = self.device_folder / "kmeans-model" / self.feature_set / self.window / self.s_rate
@@ -599,9 +603,10 @@ class ModelDevice:
         benign_cluster_model = self.benign_model[location]['cluster_model']
         # self.validate_model(benign_cluster_model, time_scale)
         # X_test = benign_cluster_model.transform(inspect_data)
-        start = time.time()
+
+        start = timeit.default_timer()
         results = benign_cluster_model.predict(inspect_data)
-        end = time.time()
+        end = timeit.default_timer()
         print('predicting time', end-start)
         # print("predicted attack data")
         # cluster_points_distances = self.find_cluster_boundary(inspect_data, benign_cluster_model.cluster_centers_, results)
@@ -617,7 +622,7 @@ class ModelDevice:
     def find_anomalies(self, location, cluster_boundary, cluster_distances, cluster_map):
         # print(time_scale,location, 'boundaries', cluster_boundary)
         j = 0
-        start = time.time()
+        start = timeit.default_timer()
         for centroid in cluster_distances:
             # print(time_scale, 'distances',  cluster_distances[centroid])
             # print('centroid', centroid, 'boundary', cluster_boundary[centroid])
@@ -629,11 +634,9 @@ class ModelDevice:
                     self.time_scale_anomalies[location]['anomalies'].append(instance)
                     self.time_scale_anomalies[location]['anomaly_index'].append(centroid_data_index[i])
                 i += 1
-        end = time.time()
-        print('anomaly detection', end- start)
+        end = timeit.default_timer()
+        print('anomaly detection time', end- start)
         print(location, 'anomalies',j)
-
-
 
     def  validate_anomalies(self):
         """TODO: Need to save anomaly outputs and extract for each experiment before running validation - requires methods"""
@@ -761,8 +764,8 @@ class ModelDevice:
         fn = anomalies - tp
         tn = negatives - (fn + fp)
         fpr = ((fp / (fp + tn)) * 100)
-        accuracy = ((tp + tn ) / (tp + tn + fp + fn)) * 100
-        print('accuracy',accuracy)
+        accuracy = ((tp + tn) / (tp + tn + fp + fn)) * 100
+        print('accuracy', accuracy)
         print('FPR', fpr)
         # print(attack_type_instances)
         print('tp', tp)

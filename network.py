@@ -212,7 +212,6 @@ class NetworkTrace:
                 self.device_flows[dst]['incoming'][flow_tuple] = []
                 self.device_flows[dst]['incoming'][flow_tuple].append(packet_data)
 
-
     def save_legend(self,handles, labels, name):
         fig = plt.figure()
         ax1 = fig.add_subplot(1, 1, 1)

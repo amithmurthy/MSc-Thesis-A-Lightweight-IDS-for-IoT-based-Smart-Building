@@ -155,10 +155,9 @@ def model_command_traffic(iot_objects, country, device, save_folder):
             if command == "power":
                 controller == "local"
                 location == "physical"
-
             for device_obj in iot_objects[command_name]:
                 """A device_obj is the devices traffic from a command tracefile"""
-                device_obj.update_profile([], []) # Calculates the flow stats
+                device_obj.update_profile([], [], True) # Calculates the flow stats
 
                 bidirectional_inputs = [flow_tuple[0] for flow_tuple in device_obj.flow_pairs]
                 bidirectional_outputs = [flow_tuple [1] for flow_tuple in device_obj.flow_pairs]
@@ -174,7 +173,7 @@ def model_command_traffic(iot_objects, country, device, save_folder):
                 output_stats = get_command_output_stats(device_obj, bidirectional_outputs)
                 input_jitter_stats = get_jitter(device_obj, "incoming")
                 output_jitter_stats = get_jitter(device_obj, "outgoing")
-                avg_ttl, ttl_pkt_no = get_avg_ttl(device_obj)
+                # avg_ttl, ttl_pkt_no = get_avg_ttl(device_obj)
                 try:
                     command_stats[command][controller][location]['input_jitter_sequence'].extend(input_jitter_stats['jitter_sequence'])
                     command_stats[command][controller][location]['output_jitter_sequence'].extend(output_jitter_stats['jitter_sequence'])
@@ -190,8 +189,8 @@ def model_command_traffic(iot_objects, country, device, save_folder):
                     command_stats[command][controller][location]['output_duration'].extend(output_stats['flow_duration'])
                     command_stats[command][controller][location]['input_pkt_sizes'].extend(get_input_pkt_sizes(device_obj))
                     command_stats[command][controller][location]['output_pkt_sizes'].extend(get_output_pkt_sizes(device_obj))
-                    command_stats[command][controller][location]['input_avg_ttl'].extend(avg_ttl)
-                    command_stats[command][controller][location]['ttl_pkt_no'].extend(ttl_pkt_no)
+                    # command_stats[command][controller][location]['input_avg_ttl'].extend(avg_ttl)
+                    # command_stats[command][controller][location]['ttl_pkt_no'].extend(ttl_pkt_no)
                 except KeyError as e:
                     print("key error controller", controller)
                     print("key error command", command)
@@ -199,8 +198,8 @@ def model_command_traffic(iot_objects, country, device, save_folder):
 
     # save_folder = str(save_folder)
 
-    # plot_command_flows(command_stats, command='on', file=save_folder)
-    # plot_command_flows(command_stats, command='off', file=save_folder)
+    plot_command_flows(command_stats, command='on', file=save_folder)
+    plot_command_flows(command_stats, command='off', file=save_folder)
 
 
     def plot_graphs():
@@ -218,14 +217,14 @@ def model_command_traffic(iot_objects, country, device, save_folder):
                 plot_command_flows(command_stats, command=command, file=save_folder)
             # plot_command_flows(command_stats, command='off', file=save_folder)
         # plot_command_flows(command_stats, commands=power, name="power", file=save_folder)
-                plot_command_jitter_cdf(command_stats, command,save_folder)
-                plot_command_pkt_size_cdf(command_stats,command ,save_folder)
+        #         plot_command_jitter_cdf(command_stats, command,save_folder)
+        #         plot_command_pkt_size_cdf(command_stats,command ,save_folder)
 
         compare_command_inputs(command_stats, save_folder)
             # pkt_size_cdf(command_stats, 'on', save_folder)
         # pkt_size_cdf(command_stats["alexa_on"]['input_jitter'], command_stats['alexa_on']['output_jitter'], save_folder)
 
-    plot_graphs()
+    # plot_graphs()
 
 def plot_command_jitter_cdf(command_stats, command,save_folder):
     """Compares the jitter of remote and local commands"""
@@ -303,6 +302,7 @@ def plot_command_flows(command_stats, command, file):
     """Plots command flow duration and size according to the direction of the command flow (input and output)"""
     fig = plt.figure()
     ax = fig.add_subplot(1,1,1)
+    print(command_stats[command]['android']['lan'])
     ax.scatter(command_stats[command]['android']['lan']['input_duration'], command_stats[command]['android']['lan']['input_size'],
                label="lan input flow", color='b')
     ax.scatter(command_stats[command]['android']['lan']['output_duration'], command_stats[command]['android']['lan']['output_size'],
@@ -313,7 +313,10 @@ def plot_command_flows(command_stats, command, file):
                label= "wan output flow", color='y')
     ax.set_ylabel("Flow size (bytes)")
     ax.set_xlabel("Flow duration (seconds)")
-    ax.set_title(command + ' command flow characteristics')
+    ax.set_title(command + ' command')
+    for item in ([ax.title, ax.xaxis.label,ax.yaxis.label] +
+                 ax.get_xticklabels() + ax.get_yticklabels()):
+        item.set_fontsize(14.5)
     file = Path(file) / command
     file = str(file) + "flowsize.png"
     plt.legend(loc='best')

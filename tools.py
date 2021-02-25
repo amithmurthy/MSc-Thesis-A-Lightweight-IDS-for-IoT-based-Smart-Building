@@ -508,3 +508,32 @@ def plot_sampling_impact(plot_type, model_data, y_label):
     plt.legend(loc='best', fontsize=14)
     plt.savefig(plot_type+"sampling_impact.png")
     plt.show()
+
+
+def get_all_devices():
+    return {"Smart Things": "d0:52:a8:00:67:5e",
+                       "Amazon Echo": "44:65:0d:56:cc:d3",
+                       "Netatmo Welcom": "70:ee:50:18:34:43",
+                       "TP-Link Day Night Cloud camera": "f4:f2:6d:93:51:f1",
+                       "Samsung SmartCam": "00:16:6c:ab:6b:88",
+                       "Dropcam": "30:8c:fb:2f:e4:b2",
+                       "Insteon Camera": "00:62:6e:51:27:2e",
+                       "Withings Smart Baby Monitor": "00:24:e4:11:18:a8",
+                       "Belkin Wemo switch":"ec:1a:59:79:f4:89",
+                       "TP-Link Smart plug": "50:c7:bf:00:56:39",
+                       "iHome":"74:c6:3b:29:d7:1d",
+                       "Belkin wemo motion sensor": "ec:1a:59:83:28:11",
+                       "NEST Protect smoke alarm":"18:b4:30:25:be:e4",
+                       "Netatmo weather station":"70:ee:50:03:b8:ac",
+                       "Withings Smart scale":"00:24:e4:1b:6f:96",
+                       "Blipcare Blood Pressure meter":"74:6a:89:00:2e:25",
+                       "Withings Aura smart sleep sensor":"00:24:e4:20:28:c6",
+                       "Light Bulbs LiFX Smart Bulb":"d0:73:d5:01:83:08",
+                       "Triby Speaker":"18:b7:9e:02:20:44",
+                       "PIX-STAR Photo-frame":"e0:76:d0:33:bb:85",
+                       "HP Printer":"70:5a:0f:e4:9b:c0",
+                       "Samsung Galaxy Tab":"08:21:ef:3b:fc:e3",
+                       "Huebulb": "00:17:88:2b:9a:25",
+                       "Chromecast": "f4:f5:d8:8f:0a:3c",
+                       "Nest Dropcam":"30:8c:fb:b6:ea:45",
+                       }
