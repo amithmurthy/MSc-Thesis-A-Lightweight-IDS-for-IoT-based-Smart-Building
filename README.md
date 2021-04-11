@@ -3,7 +3,7 @@
 ### DISCLAIMER: 
 This is by no means production level code, it is grad student code (!!) developed, under the pressure of deadlines, to fulfill research project requirements and therefore has some inefficiencies. This project consists of many parts (as described below) which requires attention to detail to function properly, and calls for hacks to make things work. The code needs to be cleaned and I will try to do so as much as possible to make it more readable, as well as provide instructions on where it can be modified for conducting experiments to investigate anomaly detection semantics, such as feature engineering, data preprocessing etc. **:construction_worker::hammer: (Readme not yet complete and file naming convention needs to be changed)** :hammer::construction_worker:
 
-## General notes the code:
+## General notes about the code:
 
 * Packet Parser:
    * Uses the Scapy library, which is slow but was chosen due to my proficiency with it. 
