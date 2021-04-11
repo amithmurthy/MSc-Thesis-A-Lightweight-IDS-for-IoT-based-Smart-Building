@@ -6,16 +6,19 @@ This is by no means production level code, it is grad student code (!!) develope
 ## General notes the code:
 
 * Packet Parser:
-      * Uses the Scapy library, which is slow but was chosen due to my proficiency with it. 
-      * Designed primarily for parsing the [UNSW](https://iotanalytics.unsw.edu.au/attack-data) and 
+   * Uses the Scapy library, which is slow but was chosen due to my proficiency with it. 
+   * Designed primarily for parsing the [UNSW](https://iotanalytics.unsw.edu.au/attack-data) and 
       [Mon(IoT)r](https://moniotrlab.ccis.neu.edu/imc19/) datasets (pcaps) e.g., LLC frame packets are dropped. 
-        *  Note: carefully read analyse_pcap() in trace_filtering.py to understand what data is being extracted from the pcaps e.g., TCP flags are not extracted 
+       *  Note: carefully read analyse_pcap() in trace_filtering.py to understand what data is being extracted from the pcaps e.g., TCP flags are not extracted 
         and logic will need to be added in order to do so. 
-      * Defines the packet direction for each packet in terms of: local_network -> iot, iot -> local_network, internet -> iot, iot -> internet, iot -> iot
-      * Extracts protocol, payload size, ip src, ip dst, src and dst ports (if applicable) from packet headers and appends info to a flow table, where keys are MAC address in the network and values are a list of extracted packet header info (dictionaries) - amounting to a device's traffic in the pcap.  
-      * Once pcap is parsed, mac addresses (keys) from flow table is instantiated as DeviceProfile() class objects and serialised using Klepto. This allows for on-the-fly analysis of device/network traffic in the pcap.
+   * Defines the packet direction for each packet in terms of: local_network -> iot, iot -> local_network, 
+      internet -> iot, iot -> internet, iot -> iot
+   * Extracts protocol, payload size, ip src, ip dst, src and dst ports (if applicable) from packet headers and 
+      appends info to a flow table, where keys are MAC address in the network and values are a list of extracted 
+      packet header info (dictionaries) - amounting to a device's traffic in the pcap.  
+   * Once pcap is parsed, mac addresses (keys) from flow table is instantiated as DeviceProfile() class objects and serialised using Klepto. This allows for on-the-fly analysis of device/network traffic in the pcap.
         * Note: the path for storing this is according to my local machine. 
-      * All logic such as timestamp conversion, payload size (TCP/UDP/IPv6/IPv4/ARP/ICMP) etc., has been rigoriously checked and validated using Wireshark.
+   * All logic such as timestamp conversion, payload size (TCP/UDP/IPv6/IPv4/ARP/ICMP) etc., has been rigoriously checked and validated using Wireshark.
  
  * Data-preprocessing & Feature Engineering:
  
