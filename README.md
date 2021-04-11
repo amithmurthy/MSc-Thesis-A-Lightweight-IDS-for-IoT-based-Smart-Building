@@ -20,7 +20,7 @@ This is by no means production level code, it is grad student code (!!) develope
         * Note: the path for storing this is according to my local machine. 
    * All logic such as timestamp conversion, payload size (TCP/UDP/IPv6/IPv4/ARP/ICMP) etc., has been rigoriously checked and validated using Wireshark.
  
- * Data-preprocessing & Feature Engineering:
+ * Data-Preprocessing & Feature Engineering:
  
       *  All serialised objects are loaded, per specified IoT device, from the directory and device traffic in the dataset is sorted into flows coarse-grained over location and direction of traffic. This creates 4 flow tuples = local_inputs, local_outputs, internet_inputs, internet_outputs
       *  The flows are computed into time series vectors, where vector elements contain the amount of traffic (bytes and packets) over the flow in consecutive s-second samples i.e., throughput of flow (e.g., internet_outputs) by the device sampled at a configurable s-second rate. 
