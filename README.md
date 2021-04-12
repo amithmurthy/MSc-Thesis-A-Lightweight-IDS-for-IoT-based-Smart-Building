@@ -31,7 +31,7 @@ This is by no means production level code, it is grad student code (!!) develope
 * Classification models & Validation: 
 
     * Classification models are device-specific and are instantiated in ModelDevice() by passing in 'train'. Anomaly detection semantics, such as cluster boundary, number of clusters/ finding optimal clusters, distance function (e.g., euclidean/manhattan) etc, can be configured in class constructor. 
-    * Anomalies are validated by converting [attack flow timestamps](https://iotanalytics.unsw.edu.au/attack-data) into the configured time scale window from preprocessing.
+    * Anomalies are validated by converting [attack flow timestamps](https://iotanalytics.unsw.edu.au/attack-data) into the configured time scale window from preprocessing stage to accurately compute classification model performance.
 
 * Misc:
     
