@@ -88,14 +88,16 @@ class DeviceProfile:
     def sort_flow_location(self, network_obj):
         all_local_network_addresses = list(network_obj.iot_devices.values()) + list(network_obj.non_iot.values()) # mac addresses of local network devices
         # local traffic in pcap
+
         local_network_addresses = [addr for addr in all_local_network_addresses if addr in list(network_obj.mac_to_ip.keys())]
+
         # print(inspect.currentframe().f_code.co_name)
         for flow in list(self.flows["incoming"].keys()):
             if flow == 0:
                 print('flow key is:', flow)
             for local_addr in local_network_addresses:
-                # Checks if flow tuple ip src is from local network; loops through mac_to_ip mac keys to get related ip
-                if flow[0] in network_obj.mac_to_ip[local_addr]:
+                # Checks if flow tuple ip src is from local network; loops through mac_to_ip mac keys to get related ip. or eth_src if flow is arp
+                if flow[0] in network_obj.mac_to_ip[local_addr] or (flow[-1] == "ARP" and flow[0] in all_local_network_addresses):
                     # Only check ip src since dst is device address
                     self.local_input_flows.append(flow)
                 else:
@@ -104,7 +106,7 @@ class DeviceProfile:
             if flow == 0:
                 print('flow is ', flow)
             for local_addr in local_network_addresses:
-                if flow[1] in network_obj.mac_to_ip[local_addr]:
+                if flow[1] in network_obj.mac_to_ip[local_addr] or (flow[-1] == "ARP" and flow[0] in all_local_network_addresses):
                     self.local_output_flows.append(flow)
                 else:
                     self.internet_output_flows.append(flow)
@@ -478,6 +480,13 @@ class DeviceProfile:
             self.internet_output_duration, self.internet_output_first_pkt = internet_output_relative_duration , internet_output_first_pkt_time
             self.local_input_duration, self.local_input_first_pkt = local_input_relative_duration, local_input_first_pkt_time
             self.local_output_duration, self.local_output_first_pkt = local_output_relative_duration, local_output_first_pkt_time
+
+            ##Check duration##
+            if list(self.local_input_rate.keys())[-1] != list(self.local_output_rate.keys())[-1]:
+                print("local inputs and outputs rate have different durations",list(self.local_input_rate.keys())[-1] , list(self.local_output_rate.keys())[-1])
+
+            if list(self.internet_input_rate.keys())[-1] != list(self.internet_output_rate.keys())[-1]:
+                print("internet inputs and outputs have different durations", list(self.internet_input_rate.keys())[-1], list(self.internet_output_rate.keys())[-1])
             print('data structure set', self.sampling_rate)
 
 
@@ -514,18 +523,32 @@ class DeviceProfile:
         plt.savefig(self.device_name + ".png")
         plt.show()
 
-    def plot_location_direction_rate(self):
+    @staticmethod
+    def convert_to_KB(byte_list):
+        return [x / 1000 for x in byte_list]
+
+    @staticmethod
+    def convert_to_min(second_count):
+        return [x / 60 for x in second_count]
+
+    def plot_location_direction_rate(self, date, traffic_type):
         fig = plt.figure()
         ax = fig.add_subplot(1, 1, 1)
-        ax.plot(list(self.internet_input_rate.keys()), list(self.internet_input_rate.values()), label='internet inputs', color='r')
-        ax.plot(list(self.internet_output_rate.keys()), list(self.internet_output_rate.values()), label='internet outputs', color='b')
-        ax.plot(list(self.local_input_rate.keys()), list(self.local_input_rate.values()), label='local inputs', color='m')
-        ax.plot(list(self.local_output_rate.keys()), list(self.local_output_rate.values()), label="local ouputs", color='c')
-        ax.set_xlabel('Duration')
-        ax.set_ylabel('Throughput (bytes)')
+        from pathlib import Path
+        if traffic_type=='benign':
+            save_path = Path(r'C:\Users\amithmurthy\Documents\Uni\Masters\Graphs\traffic_segregation')
+        else:
+            save_path = Path(r'C:\Users\amithmurthy\Documents\Uni\Masters\Graphs\attack_traffic')
+        ax.plot(self.convert_to_min(list(self.internet_input_rate.keys())), self.convert_to_KB(list(self.internet_input_rate.values())), label='internet inputs', color='r')
+        ax.plot(self.convert_to_min(list(self.internet_output_rate.keys())), self.convert_to_KB(list(self.internet_output_rate.values())), label='internet outputs', color='b')
+        ax.plot(self.convert_to_min(list(self.local_input_rate.keys())), self.convert_to_KB(list(self.local_input_rate.values())), label='local inputs', color='m')
+        ax.plot(self.convert_to_min(list(self.local_output_rate.keys())), self.convert_to_KB(list(self.local_output_rate.values())), label="local ouputs", color='g')
+        ax.set_xlabel('Time (minutes)')
+        ax.set_ylabel('Throughput (KB)')
         ax.set_title('Traffic flow segregation')
         plt.legend(loc='best')
-        plt.savefig(self.device_name + "location_direction_rates.png")
+        trace_file = date
+        plt.savefig(save_path / (self.device_name + trace_file + "location_direction_rates.png"))
         plt.show()
 
     def plot_flow_throughput(self):
@@ -963,26 +986,57 @@ class DeviceProfile:
             total_count[time_window]['pkt_count'] = pkt_rate[time_window]
         return total_count
 
-    def cluster_device_signature_features(self):
-        internet_input_vectors = self.create_traffic_volume_features("internet_inputs")
-        internet_output_vectors = self.create_traffic_volume_features("internet_outputs")
-        local_input_vectors = self.create_traffic_volume_features("local_inputs")
-        local_output_vectors = self.create_traffic_volume_features("local_outputs")
+    def cluster_device_signature_features(self, w_window, count_type, file_name):
+        internet_input_vectors = self.create_traffic_volume_features("internet_inputs", w_window=w_window)
+        internet_output_vectors = self.create_traffic_volume_features("internet_outputs",w_window=w_window)
+        local_input_vectors = self.create_traffic_volume_features("local_inputs",w_window=w_window)
+        local_output_vectors = self.create_traffic_volume_features("local_outputs",w_window=w_window)
         fig = plt.figure()
         ax = fig.add_subplot(1, 1, 1)
-        internet_input_x, internet_input_y = self.get_mean_and_std(internet_input_vectors)
-        internet_output_x, internet_output_y = self.get_mean_and_std(internet_output_vectors)
-        local_input_x, local_input_y = self.get_mean_and_std(local_input_vectors)
-        local_output_x, local_output_y = self.get_mean_and_std(local_output_vectors)
+        internet_input_x, internet_input_y = self.get_mean_and_std(internet_input_vectors, count_type)
+        internet_output_x, internet_output_y = self.get_mean_and_std(internet_output_vectors, count_type)
+        local_input_x, local_input_y = self.get_mean_and_std(local_input_vectors, count_type)
+        local_output_x, local_output_y = self.get_mean_and_std(local_output_vectors, count_type)
         if self.device_name == "Samsung SmartCam":
             print('internet input len',len(internet_input_x), len(internet_input_y))
             print('local input len', len(local_input_x), len(local_input_y))
-        ax.scatter(internet_input_x, internet_input_y, label='internet inputs', color='b')
-        ax.scatter(internet_output_x, internet_output_y, label='internet_outputs', color='r')
-        ax.scatter(local_input_x, local_input_y, label='local inputs', color='m')
-        ax.scatter(local_output_x, local_output_y, label='local outputs', color='c')
-        ax.set_xlabel("Mean (bytes)")
-        ax.set_ylabel("Standard deviation (bytes)")
-        plt.legend(loc='best')
-        plt.savefig(self.device_name+'location_direction_signature.png')
+        ax.scatter(self.convert_to_KB(internet_input_x), self.convert_to_KB(internet_input_y), label='Internet inputs', color='b', alpha=0.6)
+        ax.scatter(self.convert_to_KB(internet_output_x), self.convert_to_KB(internet_output_y), label='Internet outputs', color='r', alpha=0.6)
+        ax.scatter(self.convert_to_KB(local_input_x), self.convert_to_KB(local_input_y), label='Local inputs', color='m', alpha=0.6)
+        ax.scatter(self.convert_to_KB(local_output_x), self.convert_to_KB(local_output_y), label='Local outputs', color='c', alpha=0.6)
+        for item in ([ax.title, ax.xaxis.label, ax.yaxis.label] +
+                     ax.get_xticklabels() + ax.get_yticklabels()):
+            item.set_fontsize(15)
+
+        name = "Netatmo Cam" if self.device_name == "Netatmo Welcom" else self.device_name
+        ax.set_title(name+ " fingerprint")
+        ax.set_xlabel("Mean (KB)")
+        ax.set_ylabel("Standard deviation (KB)")
+        plt.legend(loc='best', fontsize=14)
+        from pathlib import Path
+        p = Path(r"C:\Users\amithmurthy\Documents\Uni\Masters\Graphs\Machine Learning") / self.device_name
+        plt.savefig(str(p/(file_name+'location_direction_signature.png')))
         plt.show()
+
+    def get_avg_flow_byte_rate(self):
+        flow_types = ['internet_inputs', 'internet_outputs', 'local_inputs', 'local_outputs']
+        stats = {flow: {'avg_pkt_size': None, 'avg_byte_rate': []} for flow in flow_types}
+
+        def compute_avg(flow_vectors, pkt_vector):
+            count = sum(list(flow_vectors.values()))
+            rate = count / list(flow_vectors.keys())[-1]
+            # print(count, rate, list(flow_vectors.keys())[-1])
+            pkt_size = count / sum(list(pkt_vector.values()))
+            # print(pkt_size, rate)
+            return pkt_size, rate
+
+        stats['internet_outputs']['avg_pkt_size'], stats['internet_outputs']['avg_byte_rate'] = compute_avg(
+            self.internet_output_rate, self.internet_output_pkt_rate)
+        stats['internet_inputs']['avg_pkt_size'], stats['internet_inputs']['avg_byte_rate'] = compute_avg(
+            self.internet_input_rate, self.internet_input_pkt_rate)
+        stats['local_outputs']['avg_pkt_size'], stats['local_outputs']['avg_byte_rate'] = compute_avg(
+            self.local_output_rate, self.local_output_pkt_rate)
+        stats['local_inputs']['avg_pkt_size'], stats['local_inputs']['avg_byte_rate'] = compute_avg(
+            self.local_input_rate, self.local_input_pkt_rate)
+
+        return stats

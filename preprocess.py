@@ -8,8 +8,9 @@ from collections import OrderedDict
 from scapy.all import *
 from scapy.layers.l2 import Ether
 from statistics import mean, stdev
+from sklearn.metrics import silhouette_score
 import klepto as kl
-from multiprocessing import Pool
+# from multiprocessing import Pool
 from copy import deepcopy
 # import tensorflow as tf
 from pathlib import Path
@@ -23,16 +24,6 @@ import pickle
 """ Functions for normalising data """
 
 class ModelDevice:
-    # global first_headers
-    # global second_headers
-    # first_headers = ["250_local_inputs_mean", "250_local_inputs_std", "250_local_outputs_mean",
-    #                  "250_local_outputs_std",
-    #                  "250_internet_inputs_mean", "250_internet_inputs_std", "250_internet_outputs_mean",
-    #                  "250_internet_outputs_std"]
-    # second_headers = ["500_local_inputs_mean", "500_local_inputs_std", "500_local_outputs_mean",
-    #                   "500_local_outputs_std",
-    #                   "500_internet_inputs_mean", "500_internet_inputs_std", "500_internet_outputs_mean",
-    #                   "500_internet_outputs_std"]
 
     def __init__(self, model_function, device_name, **kwargs):
         self.features = ['local_inputs_mean_bytes', 'local_inputs_std_bytes', 'local_outputs_mean_bytes', 'local_outputs_std_bytes',
@@ -41,18 +32,26 @@ class ModelDevice:
                          'internet_inputs_std_pkts', 'internet_outputs_mean_pkts', 'internet_outputs_std_pkts']
         self.first_time_scale_attributes = ['local_inputs_bytes_total', 'local_outputs_bytes_total', 'internet_inputs_bytes_total', 'internet_outputs_bytes_total',
                                             'local_inputs_pkts_total', 'local_outputs_pkts_total', 'internet_inputs_pkts_total','internet_outputs_pkts_total']
-        self.model_features = ['one_min_byte_count', 'one_min_pkt_count', 'two_min_byte_mean_10s', 'two_min_byte_mean_60s', 'two_min_std_10s', 'two_min_std_60s', 'four_min_mean_10s','four_min_std_10s',
-                               'four_min_mean_60s', 'four_min_std_60s']
+        # self.model_features = ['one_min_byte_count', 'one_min_pkt_count', 'two_min_byte_mean_10s', 'two_min_byte_count', 'two_min_std_10s', 'two_min_pkt_count', 'four_min_mean_10s','four_min_std_10s',
+        #                        'four_min_byte_count', 'four_min_pkt_count']
+        self.feature_set = "FS3"
+        if self.feature_set == "FS3":
+            self.model_features = ['one_min_byte_count', 'one_min_pkt_count', 'two_min_byte_mean', 'two_min_byte_count',
+                               'two_min_byte_std', 'two_min_pkt_count', 'two_min_pkt_mean','two_min_pkt_std','four_min_byte_mean',
+                                   'four_min_pkt_mean', 'four_min_byte_std', 'four_min_pkt_std', 'four_min_byte_count', 'four_min_pkt_count']
+        else:
+            self.model_features = ['one_min_byte_count', 'one_min_pkt_count', 'two_min_byte_mean_10s', 'two_min_byte_count',
+                               'two_min_std_10s', 'two_min_pkt_count']
         self.sampling_rates = kwargs['sampling_rate'] if 'sampling_rate' in kwargs else get_sampling_rate()
-        self.time_scales = kwargs['time_scales'] if 'time_scales' in kwargs else None
+        self.time_scales = kwargs['time_scales'] if 'time_scales' in kwargs else [60,120,240]
         self.first_time_scale_features = {sampling_rate: {feature: [] for feature in self.first_time_scale_attributes} for sampling_rate in self.sampling_rates[self.time_scales[0]]}
         self.second_time_scale_features = {sampling_rate: {feature: [] for feature in self.features} for sampling_rate in self.sampling_rates[self.time_scales[1]]}
         self.third_time_scale_features = {sampling_rate: {feature: [] for feature in self.features} for sampling_rate in self.sampling_rates[self.time_scales[2]]}
         # self.fourth_time_scale_features = {sampling_rate: {feature: [] for feature in self.features} for sampling_rate in self.sampling_rates[self.time_scales[3]]}
-        self.device_folder = Path(r"C:\Users\amith\Documents\Uni\Masters\device_attributes") / device_name
-        self.training_data = Path(r"C:\Users\amith\Documents\Uni\Masters\device_attributes") / device_name / "benign_"
-        self.attack_data = Path(r"C:\Users\amith\Documents\Uni\Masters\device_attributes") / device_name / "attack_"
-        self.save_plot_path = Path(r"C:\Users\amith\Documents\Uni\Masters\Graphs\Machine Learning") / device_name
+        self.device_folder = Path(r"C:\Users\amithmurthy\Documents\Uni\Masters\device_attributes") / device_name
+        self.training_data = Path(r"C:\Users\amithmurthy\Documents\Uni\Masters\device_attributes") / device_name / "benign_"
+        self.attack_data = Path(r"C:\Users\amithmurthy\Documents\Uni\Masters\device_attributes") / device_name / "attack_"
+        self.save_plot_path = Path(r"C:\Users\amithmurthy\Documents\Uni\Masters\Graphs\Machine Learning") / device_name
         self.experiment = kwargs['experiment'] if 'experiment' in kwargs else "all"
         self.feature_map = {
             60: 'total_count',
@@ -63,6 +62,8 @@ class ModelDevice:
         self.local_output_model = {feature: [] for feature in self.model_features}
         self.internet_input_model = {feature: [] for feature in self.model_features}
         self.internet_output_model = {feature: [] for feature in self.model_features}
+        self.internet_model = {}
+        self.local_model = {}
         print(device_name)
         self.device_name = device_name
         if model_function == 'preprocess':
@@ -80,7 +81,7 @@ class ModelDevice:
             elif model_function == 'anomaly_detection':
                 self.time_scale_anomalies = None
                 self.anomaly_timestamp = {}
-                self.benign_model = {'internet':{}, 'local':{}}
+                self.benign_model = {'internet': {}, 'local': {}}
                 self.file_device_traffic_duration = {}
                 self.relative_attack_timestamp = {}
                 self.attack_metadata = {}
@@ -92,13 +93,28 @@ class ModelDevice:
                 self.attack_metadata = OrderedDict
                 self.validate_anomalies()
 
+    def set_location_model(self, model, inputs, outputs):
+        directions = ['inputs', 'outputs']
+        for direction in directions:
+            if direction == 'inputs':
+                direction_model = inputs
+                name = 'inputs_'
+            elif direction == 'outputs':
+                direction_model = outputs
+                name = 'outputs_'
+            for feature in direction_model:
+                feature_name = name + feature
+                model[feature_name] = direction_model[feature]
+
+
+
     def get_time_scale_features(self, device_obj):
         """TODO: Abstraction for time_scale required. Currently, only processes two time_scales at a time. """
         flows = ['local_inputs', 'local_outputs', 'internet_inputs', 'internet_outputs']
         first_time_scale = {}
         second_time_scale = {}
         third_time_scale = {}
-        fourth_time_scale = {}
+        # fourth_time_scale = {}
 
         def get_count(time_scale_vectors, count_type):
             def get_total(feature_vector):
@@ -127,14 +143,6 @@ class ModelDevice:
             return [local_input, local_output, internet_input, internet_output]
 
         def get_features(time_scale_dict, time_scale):
-            # local_input_mean_bytes, local_input_std_bytes = device_obj.get_mean_and_std(time_scale_dict['local_inputs'], 'byte_count')
-            # local_output_mean_bytes, local_output_std_bytes = device_obj.get_mean_and_std(time_scale_dict['local_outputs'], 'byte_count')
-            # internet_input_mean_bytes, internet_input_std_bytes = device_obj.get_mean_and_std(time_scale_dict['internet_inputs'], 'byte_count')
-            # internet_output_mean_bytes, internet_output_std_bytes = device_obj.get_mean_and_std(time_scale_dict['internet_outputs'], 'byte_count')
-            # local_input_mean_pkts, local_input_std_pkts = device_obj.get_mean_and_std(time_scale_dict['local_inputs'], 'pkt_count')
-            # local_output_mean_pkts, local_output_std_pkts = device_obj.get_mean_and_std(time_scale_dict['local_outputs'], 'pkt_count')
-            # internet_input_mean_pkts, internet_input_std_pkts = device_obj.get_mean_and_std(time_scale_dict['internet_inputs'], 'pkt_count')
-            # internet_output_mean_pkts, internet_output_std_pkts = device_obj.get_mean_and_std(time_scale_dict['internet_outputs'], 'pkt_count')
             if self.feature_map[time_scale] == 'total_count':
                 total_bytes = get_count(time_scale_dict, 'byte_count')
                 total_pkts = get_count(time_scale_dict, 'pkt_count')
@@ -161,8 +169,8 @@ class ModelDevice:
         def set_time_scale_attributes(sampling_rate):
             first_time_scale[sampling_rate] = {attr: None for attr in flows}
             second_time_scale[sampling_rate] = {attr: None for attr in flows}
-            third_time_scale[sampling_rate] = {attr: None for attr in flows}
-            fourth_time_scale[sampling_rate] = {attr: None for attr in flows}
+            # third_time_scale[sampling_rate] = {attr: None for attr in flows}
+            # fourth_time_scale[sampling_rate] = {attr: None for attr in flows}
 
         def compute_time_scale_feat(time_scale, time_scale_feature, global_feature_dict):
             # local time scale dict not initialised in for loops above as for loop necessary below i.e. less time complexity
@@ -182,16 +190,18 @@ class ModelDevice:
                     time_scale_feature[sampling_rate] = {attr: None for attr in flows}
                     for attribute in flows:
                         time_scale_feature[sampling_rate][attribute] = device_obj.create_traffic_volume_features(attribute, w_window=time_scale)
-                    # feature_cols = get_features(time_scale_feature[sampling_rate], time_scale)
-                    # set_features(feature_cols, global_feature_dict[sampling_rate])
+                    feature_cols = get_features(time_scale_feature[sampling_rate], time_scale)
+                    set_features(feature_cols, global_feature_dict[sampling_rate])
 
         compute_time_scale_feat(self.time_scales[0], first_time_scale, self.first_time_scale_features)
         # print(first_time_scale[60]['local_inputs'][0]['byte_count'])
         # print(self.first_time_scale_features[60]['local_inputs_bytes_total'][0])
         compute_time_scale_feat(self.time_scales[1], second_time_scale, self.second_time_scale_features)
         compute_time_scale_feat(self.time_scales[2], third_time_scale, self.third_time_scale_features)
-        print('60s rate last key val', third_time_scale[60]['local_inputs'][list(third_time_scale[60]['local_inputs'].keys())[-1]])
-        print('10s rate last key val', third_time_scale[10]['local_inputs'][list(third_time_scale[10]['local_inputs'].keys())[-1]])
+        # print(second_time_scale.)
+        print(self.second_time_scale_features[10].keys())
+        # print('60s rate last key val', third_time_scale[60]['local_inputs'][list(third_time_scale[60]['local_inputs'].keys())[-1]])
+        # print('10s rate last key val', third_time_scale[10]['local_inputs'][list(third_time_scale[10]['local_inputs'].keys())[-1]])
 
         def merge_time_scale_features(flow_type, traffic_model):
             """flow_type: local_inputs, local_outputs etc
@@ -199,106 +209,121 @@ class ModelDevice:
             one_min_features = first_time_scale[60][flow_type]
             two_min_features = {sampling_window: second_time_scale[sampling_window][flow_type] for sampling_window in second_time_scale}
             four_min_features = {sampling_window: third_time_scale[sampling_window][flow_type] for sampling_window in third_time_scale}
-            print(four_min_features[10])
             # Check that flow type is same as traffic_model?
             # Take 60s sampling rate as ground truth (10s sampling rate is an experiment)
-            last_window = list(four_min_features[10].keys())[-1]
-            print(last_window)
-            if len(four_min_features[10][last_window]['byte_count']['volume']) > 1 and four_min_features[10][last_window]['byte_count']['mean'] is None :
-                four_min_features[10][last_window]['byte_count']['mean'] = mean(four_min_features[10][last_window]['byte_count']['volume'])
-                four_min_features[10][last_window]['byte_count']['std'] = stdev(four_min_features[10][last_window]['byte_count']['volume'])
-            for window in four_min_features[10]:
+            s_rate = get_sampling_rate(self.time_scales[1])[0]
+            print(s_rate)
+            last_window = list(four_min_features[s_rate].keys())[-1]
+            # print(last_window)
+            if len(two_min_features[s_rate][last_window]['byte_count']['volume']) > 1 and two_min_features[s_rate][last_window]['byte_count']['mean'] is None:
+                two_min_features[s_rate][last_window]['byte_count']['mean'] = mean(two_min_features[s_rate][last_window]['byte_count']['volume'])
+                two_min_features[s_rate][last_window]['byte_count']['std'] = stdev(two_min_features[s_rate][last_window]['byte_count']['volume'])
+                two_min_features[s_rate][last_window]['pkt_count']['mean'] = mean(two_min_features[s_rate][last_window]['pkt_count']['volume'])
+                two_min_features[s_rate][last_window]['pkt_count']['std'] = mean(two_min_features[s_rate][last_window]['pkt_count']['volume'])
+            if len(four_min_features[s_rate][last_window]['byte_count']['volume']) > 1 and four_min_features[s_rate][last_window]['byte_count']['mean'] is None:
+                four_min_features[s_rate][last_window]['byte_count']['mean'] = mean(four_min_features[s_rate][last_window]['byte_count']['volume'])
+                four_min_features[s_rate][last_window]['byte_count']['std'] = stdev(four_min_features[s_rate][last_window]['byte_count']['volume'])
+                four_min_features[s_rate][last_window]['pkt_count']['mean'] = mean(four_min_features[s_rate][last_window]['pkt_count']['volume'])
+                four_min_features[s_rate][last_window]['pkt_count']['std'] = mean(four_min_features[s_rate][last_window]['pkt_count']['volume'])
+
+            for window in four_min_features[s_rate]:
                 traffic_model['one_min_byte_count'].append(one_min_features[window]['byte_count'])
                 traffic_model['one_min_pkt_count'].append(one_min_features[window]['pkt_count'])
-                traffic_model['two_min_byte_mean_10s'].append(two_min_features[10][window]['byte_count']['mean'])
-                traffic_model['two_min_byte_mean_60s'].append(two_min_features[60][window]['byte_count']['mean'])
-                traffic_model['two_min_std_10s'].append(two_min_features[10][window]['byte_count']['std'])
-                traffic_model['two_min_std_60s'].append(two_min_features[60][window]['byte_count']['std'])
-                traffic_model['four_min_mean_10s'].append(four_min_features[10][window]['byte_count']['mean'])
-                traffic_model['four_min_mean_60s'].append(four_min_features[60][window]['byte_count']['mean'])
-                traffic_model['four_min_std_10s'].append(four_min_features[10][window]['byte_count']['std'])
-                traffic_model['four_min_std_60s'].append(four_min_features[60][window]['byte_count']['std'])
-
+                traffic_model['two_min_byte_mean'].append(two_min_features[s_rate][window]['byte_count']['mean'])
+                traffic_model['two_min_byte_count'].append(sum(two_min_features[s_rate][window]['byte_count']['volume']))
+                traffic_model['two_min_byte_std'].append(two_min_features[s_rate][window]['byte_count']['std'])
+                traffic_model['two_min_pkt_count'].append(sum(two_min_features[s_rate][window]['pkt_count']['volume']))
+                traffic_model['two_min_pkt_mean'].append(two_min_features[s_rate][window]['pkt_count']['mean'])
+                traffic_model['two_min_pkt_std'].append(two_min_features[s_rate][window]['pkt_count']['std'])
+                # traffic_model['four_min_mean_10s'].append(four_min_features[s_rate][window]['byte_count']['mean'])
+                traffic_model['four_min_byte_count'].append(sum(four_min_features[s_rate][window]['byte_count']['volume']))
+                # traffic_model['four_min_std_10s'].append(four_min_features[s_rate][window]['byte_count']['std'])
+                traffic_model['four_min_pkt_count'].append(sum(four_min_features[s_rate][window]['pkt_count']['volume']))
+                traffic_model['four_min_pkt_mean'].append(four_min_features[s_rate][window]['pkt_count']['mean'])
+                traffic_model['four_min_byte_mean'].append(four_min_features[s_rate][window]['byte_count']['mean'])
+                traffic_model['four_min_pkt_std'].append(four_min_features[s_rate][window]['pkt_count']['std'])
+                traffic_model['four_min_byte_std'].append(four_min_features[s_rate][window]['byte_count']['std'])
         # f = ['one_min_byte_count', 'one_min_pkt_count', 'two_min_byte_mean_10s', 'two_min_byte_mean_60s', 'two_min_std_10s', 'two_min_std_60s',
         #      'four_min_mean_10s', 'four_min_std_10s','four_min_mean_60s', 'four_min_std_60s']
 
 
-        merge_time_scale_features('local_inputs', self.local_input_model)
-        print(self.local_input_model)
-        # for sampling_rate in self.sampling_rates:
-        #     set_time_scale_attributes(sampling_rate)
-        #     device_obj.set_sampling_rate(sampling_rate)
-        #     device_obj.set_location_direction_rates()
-        #     for attribute in flows:
-        #         first_time_scale[sampling_rate][attribute] = device_obj.merge_byte_pkt_count(attribute, sliding_window=self.time_scales[0])
-        #         second_time_scale[sampling_rate][attribute] = device_obj.create_traffic_volume_features(attribute, w_window=self.time_scales[1])
-        #         third_time_scale[sampling_rate][attribute] = device_obj.create_traffic_volume_features(attribute, w_window=self.time_scales[2])
-        #         # fourth_time_scale[sampling_rate][attribute] = device_obj.create_traffic_volume_features(attribute, w_window=self.time_scales[3])
-        #     first_time_scale_feat = get_features(first_time_scale[sampling_rate])
-        #     second_time_scale_feat = get_features(second_time_scale[sampling_rate])
-        #     third_time_scale_feat = get_features(third_time_scale[sampling_rate])
-        #     # fourth_time_scale_feat = get_features(fourth_time_scale[sampling_rate])
-        #     set_features(first_time_scale_feat, self.first_time_scale_features[sampling_rate])
-        #     set_features(second_time_scale_feat, self.second_time_scale_features[sampling_rate])
-        #     set_features(third_time_scale_feat, self.third_time_scale_features[sampling_rate])
-            # set_features(fourth_time_scale_feat, self.fourth_time_scale_features[sampling_rate])
+        # merge_time_scale_features('local_inputs', self.local_input_model)
+        # merge_time_scale_features('local_outputs', self.local_output_model)
+        # merge_time_scale_features('internet_inputs', self.internet_input_model)
+        # merge_time_scale_features('internet_outputs', self.internet_output_model)
+        # self.set_location_model(self.local_model, self.local_input_model, self.local_output_model)
+        # self.set_location_model(self.internet_model, self.internet_input_model, self.internet_output_model)
+
 
     def process_all_traffic(self):
         if self.saved_features is False:
             i = 1
             for device_obj in self.device_traffic:
-                if i < 3:
+                if i < math.inf:
                     self.get_time_scale_features(device_obj)
                 else:
                     break
                 i += 1
+        # print(self.internet_input_model['two_min_byte_count'])
+        # print(self.internet_input_model['four_min_byte_count'])
         # print('finished feature extraction')
-        # self.save_device_traffic_attributes()
-        # self.plot_graphs()
+        # self.save_model_data()
+        self.plot_graphs()
 
     def plot_graphs(self):
         print("plotting graphs")
-        self.plot_attribute_cluster("first", self.sampling_rates[0])
-        self.plot_attribute_cluster("second", self.sampling_rates[0])
-        self.compare_sampling_window(self.first_time_scale_features, 'internet', self.time_scales[0])
-        self.compare_sampling_window(self.first_time_scale_features, 'local', self.time_scales[0])
+        # self.plot_attribute_cluster("first", self.sampling_rates[0])
+        # self.plot_attribute_cluster("second", self.sampling_rates[0])
+        self.compare_sampling_window(self.second_time_scale_features, 'internet', self.time_scales[0])
+        self.compare_sampling_window(self.second_time_scale_features, 'local', self.time_scales[0])
         # self.compare_sampling_window(self.second_time_scale_features, 'internet', self.time_scales[1])
         # self.compare_sampling_window(self.second_time_scale_features, 'local', self.time_scales[1])
         locations = ['local', 'internet']
         directions = ['inputs', 'outputs']
-        for location in locations:
-            self.plot_feature_correlation(self.first_time_scale_features, location, self.sampling_rates[0], directions[0], self.time_scales[0])
-            self.plot_feature_correlation(self.first_time_scale_features, location, self.sampling_rates[0], directions[1], self.time_scales[0])
-            # self.plot_feature_correlation(self.first_time_scale_features, location, self.sampling_rates[1], directions[0], self.time_scales[0])
+        # for location in locations:
+        #     self.plot_feature_correlation(self.first_time_scale_features, location, self.sampling_rates[0], directions[0], self.time_scales[0])
+        #     self.plot_feature_correlation(self.first_time_scale_features, location, self.sampling_rates[0], directions[1], self.time_scales[0])
+        #     self.plot_feature_correlation(self.first_time_scale_features, location, self.sampling_rates[1], directions[0], self.time_scales[0])
             # self.plot_feature_correlation(self.first_time_scale_features, location, self.sampling_rates[1],directions[1], self.time_scales[0])
-            self.plot_feature_correlation(self.second_time_scale_features, location, self.sampling_rates[0], directions[0], self.time_scales[1])
-            self.plot_feature_correlation(self.second_time_scale_features, location, self.sampling_rates[0], directions[1], self.time_scales[1])
+            # self.plot_feature_correlation(self.second_time_scale_features, location, self.sampling_rates[0], directions[0], self.time_scales[1])
+            # self.plot_feature_correlation(self.second_time_scale_features, location, self.sampling_rates[0], directions[1], self.time_scales[1])
             # self.plot_feature_correlation(self.second_time_scale_features, location, self.sampling_rates[1], directions[0], self.time_scales[1])
             # self.plot_feature_correlation(self.second_time_scale_features, location, self.sampling_rates[1],directions[1], self.time_scales[1])
 
+    @staticmethod
+    def convert_to_KB(byte_list):
+        return [x / 1000 for x in byte_list]
+
+    @staticmethod
+    def convert_to_MB(byte_list):
+        return [x / 1000000 for x in byte_list]
 
     def compare_sampling_window(self, time_scale, location, w_window):
         """time_scale = time_scale_features"""
         fig = plt.figure()
         ax = fig.add_subplot(1, 1, 1)
-        name = "Sliding window " + str(w_window) +location + self.data_type + " singature"
+        name = "Sampling window "+ self.data_type+ " "+location + " traffic fingerprints"
         ax.set_title(name)
-        ax.set_xlabel("mean (bytes)")
-        ax.set_ylabel("standard deviation (bytes)")
-        sample_rate_1 = time_scale[self.sampling_rates[0]]
-        # sample_rate_2 = time_scale[self.sampling_rates[1]]
-        ax.scatter(sample_rate_1[location+'_inputs_mean_bytes'], sample_rate_1[location+'_inputs_std_bytes'], label= str(self.sampling_rates[0])+" "+location+' inputs', color='g', alpha=0.6)
-        # ax.scatter(sample_rate_2[location+'_inputs_mean_bytes'], sample_rate_2[location+'_inputs_std_bytes'], label= str(self.sampling_rates[1])+" "+location+' inputs', color='c', alpha=0.6)
-        ax.scatter(sample_rate_1[location+'_outputs_mean_bytes'], sample_rate_1[location+'_outputs_std_bytes'], label= str(self.sampling_rates[0])+" "+location+' outputs', color='r', alpha=0.6)
-        # ax.scatter(sample_rate_2[location+'_outputs_mean_bytes'], sample_rate_2[location+'_outputs_std_bytes'], label= str(self.sampling_rates[1])+" "+location+' outputs', color='b', alpha=0.6)
-        plt.legend(loc='best')
+        ax.set_xlabel("Mean (KB)")
+        ax.set_ylabel("Standard Deviation (KB)")
+        window_s_rate = list(time_scale.keys())
+        # print(window_s_rate)
+        sample_rate_1 = time_scale[window_s_rate[0]]
+        sample_rate_2 = time_scale[window_s_rate[1]]
+        ax.scatter(self.convert_to_KB(sample_rate_1[location+'_inputs_mean_bytes']), self.convert_to_KB(sample_rate_1[location+'_inputs_std_bytes']), label=str(window_s_rate[0])+"s " +' inputs', color='g', alpha=0.65)
+        ax.scatter(self.convert_to_KB(sample_rate_2[location+'_inputs_mean_bytes']), self.convert_to_KB(sample_rate_2[location+'_inputs_std_bytes']), label=str(window_s_rate[1])+"s " +' inputs', color='m', alpha=0.6)
+        ax.scatter(self.convert_to_KB(sample_rate_1[location+'_outputs_mean_bytes']), self.convert_to_KB(sample_rate_1[location+'_outputs_std_bytes']), label=str(window_s_rate[0])+"s " +' outputs', color='r', alpha=0.6)
+        ax.scatter(self.convert_to_KB(sample_rate_2[location+'_outputs_mean_bytes']), self.convert_to_KB(sample_rate_2[location+'_outputs_std_bytes']), label=str(window_s_rate[1])+"s " +' outputs', color='b', alpha=0.6)
+        for item in ([ax.title, ax.xaxis.label, ax.yaxis.label] + ax.get_xticklabels() + ax.get_yticklabels()):
+            item.set_fontsize(14)
+        plt.legend(loc='best', fontsize=13)
         plt.savefig(str(self.save_plot_path / self.device_name) + name + ".png")
         plt.show()
 
     def plot_feature_correlation(self, time_scale_features, location, sampling_rate, direction, time_scale):
         fig = plt.figure()
         ax = fig.add_subplot(1,1,1)
-        name = str(time_scale) +" window" +" "+ str(sampling_rate) + " sampling rate"
+        name = "Correlation between packet and byte counts"
         ax.set_title(name)
         ax.set_ylabel('Byte count (KB)')
         ax.set_xlabel('Packet count')
@@ -313,6 +338,8 @@ class ModelDevice:
 
         def convert_to_KB(input_data):
             return [x / 1000 for x in input_data]
+        for item in ([ax.title, ax.xaxis.label, ax.yaxis.label] + ax.get_xticklabels() + ax.get_yticklabels()):
+            item.set_fontsize(14)
 
         ax.scatter(convert_to_KB(time_scale_features[sampling_rate][location+'_'+direction+'_mean_bytes']),
                    convert_to_KB(time_scale_features[sampling_rate][location+'_'+direction+'_std_bytes']))
@@ -333,23 +360,23 @@ class ModelDevice:
         ax.set_title(name+" signature")
         ax.set_xlabel("mean (bytes)")
         ax.set_ylabel("standard deviation (bytes)")
-        ax.scatter(time_scale['local_inputs_mean_bytes'], time_scale['local_inputs_std_bytes'], label="local inputs", color='r', alpha=0.6)
-        ax.scatter(time_scale['local_outputs_mean_bytes'], time_scale['local_outputs_std_bytes'], label="local outputs", color='b', alpha=0.6)
-        ax.scatter(time_scale['internet_inputs_mean_bytes'], time_scale['internet_inputs_std_bytes'], label='internet inputs', color='g', alpha=0.6)
-        ax.scatter(time_scale['internet_outputs_mean_bytes'], time_scale['internet_outputs_std_bytes'], label='internet outputs', color='c', alpha=0.6)
+        ax.scatter(time_scale['local_inputs_mean_bytes'], time_scale['local_inputs_std_bytes'], label="Local inputs", color='r', alpha=0.6)
+        ax.scatter(time_scale['local_outputs_mean_bytes'], time_scale['local_outputs_std_bytes'], label="Local outputs", color='b', alpha=0.6)
+        ax.scatter(time_scale['internet_inputs_mean_bytes'], time_scale['internet_inputs_std_bytes'], label='Internet inputs', color='g', alpha=0.6)
+        ax.scatter(time_scale['internet_outputs_mean_bytes'], time_scale['internet_outputs_std_bytes'], label='Internet outputs', color='c', alpha=0.6)
         plt.legend(loc='best')
         plt.savefig(str(self.save_plot_path / self.device_name) + name + str(sampling_rate) +"attributes.png")
         plt.show()
 
-    def normalise_time_scale(self, df, ts):
-        file_path = Path(r"C:\Users\amith\Documents\Uni\Masters\device_attributes") / self.device_name / "kmeans-model"/ (str(ts) +'scaler.pkl')
+    def normalise_time_scale(self, df, ts, window, s_rate):
+        file_path = Path(r"C:\Users\amithmurthy\Documents\Uni\Masters\device_attributes") / self.device_name / "kmeans-model"/self.feature_set/window/s_rate/ (str(ts) +'scaler.pkl')
         headers = list(df.columns)
         if self.data_type == 'benign':
             scaler = StandardScaler()
             df[headers] = scaler.fit_transform(df.values)
             pickle.dump(scaler, open(str(file_path), 'wb'))
-            print('scaler mean', scaler.mean_)
-            print('scaler std', scaler.var_)
+            # print('scaler mean', scaler.mean_)
+            # print('scaler std', scaler.var_)
         elif self.data_type == 'attack':
             print('saved scaler used')
             scaler = pickle.load(open(str(file_path), 'rb'))
@@ -364,6 +391,57 @@ class ModelDevice:
                 header = str(sampling_rate) + '_' + str(time_scale) + '_' + str(feature)
                 df[header] = pd.Series(time_scale_features[sampling_rate][feature])
         return df
+
+    def z_score(self, cols, df, org_df, ts, traffic_type, window, s_rate):
+        print('calculating z-score')
+        file_path = Path(
+            r"C:\Users\amithmurthy\Documents\Uni\Masters\device_attributes") / self.device_name / "kmeans-model" /self.feature_set/window/s_rate /(
+                                str(ts) + '-zscore')
+        if file_path.is_dir() is False:
+            file_path.mkdir()
+        z_score_cols = []
+        for col in cols:
+            col_zscore = col + '_zscore'
+            z_score_cols.append(col_zscore)
+            if self.data_type == 'benign':
+                mean = org_df[col].mean()
+                std = org_df[col].std()
+                # print('ddof=0', org_df[col].std(ddof=0))
+                df[col_zscore] = (org_df[col] - mean) / std
+                pickle.dump(mean, open(str(file_path / (col + traffic_type + '_mean.pickle')), 'wb'))
+                pickle.dump(std, open(str(file_path / (col + traffic_type + '_std.pickle')), 'wb'))
+            elif self.data_type == 'attack':
+                mean = pickle.load(open(str(file_path / (col + traffic_type + '_mean.pickle')), 'rb'))
+                std = pickle.load(open(str(file_path / (col + traffic_type + '_std.pickle')), 'rb'))
+                df[col_zscore] = (org_df[col] - mean) / std
+        return df
+
+    def save_model_data(self):
+
+        def convert_to_df(model):
+            df = pd.DataFrame()
+            for feature in model:
+                df[feature] = pd.Series(model[feature])
+            return df
+        window = math.floor(self.time_scales[-1] / 60)
+        window_folder = str(window) + "min_window"
+        sampling_rate = str(list(self.second_time_scale_features.keys())[0]) + "s-sampling"
+        internet_model = convert_to_df(self.internet_model)
+        local_model = convert_to_df(self.local_model)
+        feature_path = self.device_folder / 'features' / self.feature_set / window_folder/sampling_rate
+        internet_model.to_csv(str(feature_path /(self.data_type +"internet_model.csv")))
+        local_model.to_csv(str(self.device_folder / 'features' / self.feature_set/window_folder/sampling_rate/ (self.data_type + 'local_model.csv')))
+        local_model.replace(np.nan, 0, inplace=True)
+        internet_model.replace(np.nan, 0, inplace=True)
+
+        save_path = Path(r'C:\Users\amithmurthy\Documents\Uni\Masters')/self.feature_set / self.device_name / window_folder/ sampling_rate
+        self.z_score(list(internet_model.columns), pd.DataFrame(), internet_model, self.time_scales[-1],'internet_model', window_folder, sampling_rate).to_csv(str(save_path / (self.data_type + 'zscore_internet.csv')))
+        self.z_score(list(local_model.columns), pd.DataFrame(), local_model, self.time_scales[-1],
+                     'local_model', window_folder, sampling_rate).to_csv(
+            str(save_path / (str(self.time_scales[-1]) + self.data_type + 'zscore_local.csv')))
+        self.normalise_time_scale(internet_model, 'internet', window_folder, sampling_rate).to_csv(str(save_path / (str(self.time_scales[-1]) + self.data_type + 'standardScaler_internet.csv')))
+        self.normalise_time_scale(local_model, 'local', window_folder, sampling_rate).to_csv(str(save_path / (str(self.time_scales[-1]) + self.data_type + 'standardScaler_local.csv')))
+
 
     def save_device_traffic_attributes(self):
         """Takes in one single device instance"""
@@ -902,21 +980,47 @@ class ModelDevice:
 
     def find_k(self, df, file):
         print('finding K', file)
+        # model = KMeans()
         x = df.values
-        K = range(2,20)
-        inertia = []
-        for k in K:
-            km = KMeans(n_clusters=k, init="random",n_init=10)
-            km = km.fit(x)
-            inertia.append(km.inertia_)
-        plt.plot(K, inertia, 'bx-')
-        plt.xlabel('k')
-        plt.ylabel('Inertia')
-        plt.title(file+'Elbow method')
-        plt.savefig(str(self.save_plot_path / file)+'elbowmethod.png')
-        print("elbow method printed in machine learning plot folder")
-        plt.show()
-        # print(inertia)
+        # # visualiser = KElbowVisualizer(model, k=(2,40))
+        # # visualiser.fit(x)
+        # # visualiser.show(outpath=str(self.save_plot_path / file)+'visualiser.png')
+        # K = range(2,30)
+        # inertia = []
+        # for k in K:
+        #     km = KMeans(n_clusters=k)
+        #     km = km.fit(x)
+        #     inertia.append(km.inertia_)
+        # plt.plot(K, inertia, 'bx-')
+        # plt.xlabel('Number of clusters')
+        # plt.ylabel('Inertia')
+        # plt.title(file+'Elbow method')
+        # plt.savefig(str(self.save_plot_path / file)+'elbowmethod.png')
+        # print("elbow method printed in machine learning plot folder")
+        # # print('running silhoutte score')
+        # # self.silhouette_score(df, file)
+        # plt.show()
+        # # print(inertia)
+
+        def compute_silhouette_score(df, file):
+            K = range(2,30)
+            scores = []
+            for k in K:
+                k_model = KMeans(n_clusters=k).fit(x)
+                label = k_model.labels_
+                sil_coeff = silhouette_score(x, label, metric='euclidean')
+                scores.append(sil_coeff)
+                # print("For n_clusters={}, The Silhouette Coefficient is {}".format(k, sil_coeff))
+            plt.plot(K, scores, 'bx-')
+            plt.xlabel('Number of clusters')
+            plt.ylabel("silhoutte score")
+            location = 'internet' if 'internet' in str(file) else 'local'
+
+            plt.title(location + 'model')
+            plt.savefig(str(self.save_plot_path / file) + 'silhouette_test2.png')
+            plt.show()
+
+        compute_silhouette_score(df, file)
 
     def clean_dataset(self, df):
         df.dropna(inplace=True)
