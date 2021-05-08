@@ -35,8 +35,8 @@ This is by no means production level code, it is grad student code (!!) develope
 
 * Misc:
     
-    *  PacketLevelSignatures, as outlined by [Trimananda et al.](https://www.ndss-symposium.org/wp-content/uploads/2020/02/24097.pdf) in NDSS, distinctly capture the event-driven communication behaviour of IoT devices which can possibly be leveraged as a feature. Due to time constraints this was not properly explored, but the signature extraction methodology is implemented in packet_level_signature.py. 
-    *  Data visualisation functions contain "plot" (naming convention) to graph feature correlation,devive traffic fingerprints, classification model performance plots, and much more. 
+    *  PacketLevelSignatures, as outlined by [Trimananda et al.](https://www.ndss-symposium.org/wp-content/uploads/2020/02/24097.pdf) in NDSS, distinctly captures the event-driven communication behaviour of IoT devices. This can possibly be leveraged as a feature to train ML models. Due to time constraints this was not properly explored, but the signature extraction methodology is implemented in packet_level_signature.py - read packet_parser_control to call instantiate the object. 
+    *  Data visualisation functions contain "plot" (naming convention) to graph feature correlation, devive traffic fingerprints, classification model performance plots, flow throughput in bytes/packets, and much more. 
 
 
  
