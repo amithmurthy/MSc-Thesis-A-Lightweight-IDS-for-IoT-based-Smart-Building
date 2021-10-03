@@ -14,12 +14,8 @@ import shelve
 import klepto as kl
 from network import NetworkTrace
 from datetime import datetime, date, timedelta
-from device import DeviceProfile
+# from device import DeviceProfile
 from tools import *
-
-
-"""Gloabl variables"""
-
 
 class PktDirection(Enum):
     not_defined = 0
@@ -36,7 +32,7 @@ def analyse_pcap(NetworkTraffic, file, **kwargs):
 
     # device_filter = False
 
-    # Count limit is to limit processing for testing logic. if passed as an arguement, use arguement value as limit
+    # Count limit is to limit processing for testing logic. if passed as an argument, use argument value as limit
     if 'count_limit' in kwargs.keys():
         count_limit = kwargs['count_limit']
     else:

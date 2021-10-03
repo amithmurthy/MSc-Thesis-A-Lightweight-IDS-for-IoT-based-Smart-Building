@@ -247,8 +247,6 @@ def plot_command_jitter_cdf(command_stats, command,save_folder):
     ax.set_xlabel("jitter (ms)")
     ax.set_ylabel("CDF")
     ax.set_title(command + ' input traffic jitter')
-    # ax.plot(command_jitter_values, command_jitter_cdf, label='command jitter')
-    # ax.plot(command_response_jitter, command_response_cdf, label='response jitter')
     plt.legend(loc='best')
     save_file = Path(save_folder) / command
     plt.savefig(str(save_file) +"jittercdf.png")

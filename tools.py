@@ -5,6 +5,7 @@ from device import DeviceProfile
 import math
 import re
 import time
+from datetime import datetime
 import matplotlib.pyplot as plt
 import logging
 logging.basicConfig(level=logging.INFO)
@@ -84,6 +85,7 @@ def unpickle_network_trace_and_device_obj(file_path, **kwargs):
         if count > limit:
             break
         if file_filter is not None:
+            print(str(network_trace)[-9:])
             if str(network_trace)[-9:] not in file_filter: #or str(network_trace)[-9:] != file_filter:
                 continue
         network_trace_file_path = file_path + '\_' + str(network_trace)[-8:]
@@ -132,10 +134,11 @@ def create_device_plots(devices, malicious_pkts, benign_pkts):
     for device in devices:
         device.update_profile(malicious_pkts, benign_pkts)
 
-def get_malicious_flows(folder_path):
-    folder = Path(folder_path)
 
+def get_malicious_flows(*folder_path):
+    folder = Path(folder_path) if folder_path else Path(r"C:\Users\amith\Documents\Uni\Masters\Datasets\UNSW\2018\annotations\annotations")
     malicious_flows = {}
+
     for file in folder.iterdir():
         if "packet" in file.name:
             device_mac_int = str(file.name)[:12]
@@ -153,26 +156,15 @@ def get_malicious_flows(folder_path):
                         proto = "TCP"
                     elif elements[6] == '17':
                         proto = "UDP"
-                    date = time.strftime('%Y-%m-%d', time.localtime(int(elements[0])/1000))
+                    date = datetime.utcfromtimestamp(int(elements[0])/1000).strftime('%Y-%m-%d')
+                    # date_2 = time.strftime('%Y-%m-%d', time.localtime(int(elements[0])/1000))
                     if date in malicious_flows[device]:
                         malicious_flows[device][date].append((elements[4], elements[5], int(elements[7]), int(elements[8]), proto))
                     else:
                         malicious_flows[device][date] = []
                         malicious_flows[device][date].append((elements[4], elements[5], int(elements[7]), int(elements[8]), proto))
+
     return malicious_flows
-#
-# def get_device_cluster(device, location, time_scale):
-#     device_cluster = {
-#         'Amazon Echo': {'internet':{'50s':9, '100s':9, '180s':7}, 'local':{'50s':9,'100s':7, '180s':10}},
-#         'Belkin wemo motion sensor': {'internet':{'50s':9,'100s':10,'180s':11}, 'local':{'50s':9,'100s':8, '180s':7}},
-#         'Belkin Wemo switch': {'internet':{'50s':7,'100s':7, '180s':6}, 'local':{'50s':8,'100s':6, '180s':6}},
-#         'Light Bulbs LiFX Smart Bulb': {'internet':{'50s':6,'100s':6, '150s':6,'180s':9, '200s':6}, 'local':{'50s':5,'100s':5, '150s':4, '180s':5,'200s':4}},
-#         'Netatmo Welcom':{'internet':{'50s':6,'100s':6, '150s':6,'180s':6, '200s':6}, 'local':{'50s':5,'100s':5, '150s':5,'180s':7, '200s':5}},
-#         'Samsung SmartCam':{'internet':{'50s':5,'100s':6, '180s':6}, 'local':{'50s':7,'100s':7,'180s':6}},
-#         'TP-Link Smart plug':{'internet':{'50s':8,'100s':7, '180s':7}, 'local':{'50s':6,'100s':7, '180s':7}}
-#     }
-#
-#     return device_cluster[device][location][time_scale]
 
 def get_device_cluster(device, location, feature_set, time_window, s_rate):
     device_cluster = {
@@ -252,8 +244,8 @@ def get_sampling_rate(*time_scale):
     """Return the sampling rate/s for a time scale/window"""
     time_scale_sampling_rate = {
         60: [60],
-        120: [10,60],
-        240: [10, 60],
+        120: [10,30,60],
+        240: [10, 30, 60],
     }
     if time_scale:
         return time_scale_sampling_rate[time_scale[0]]
@@ -326,6 +318,37 @@ def get_iot_devices(country):
     elif country == "us":
         return us_iot_devices
 
+def get_iot_device_name(mac_addr):
+    """Takes in mac address and returns device name"""
+    iot_devices = {"Smart Things": "d0:52:a8:00:67:5e",
+                        "Amazon Echo": "44:65:0d:56:cc:d3",
+                        "Netatmo Welcom": "70:ee:50:18:34:43",
+                        "TP-Link Day Night Cloud camera": "f4:f2:6d:93:51:f1",
+                        "Samsung SmartCam": "00:16:6c:ab:6b:88",
+                        "Dropcam": "30:8c:fb:2f:e4:b2",
+                        "Insteon Camera": "00:62:6e:51:27:2e",
+                        "Withings Smart Baby Monitor": "00:24:e4:11:18:a8",
+                        "Belkin Wemo switch": "ec:1a:59:79:f4:89",
+                        "TP-Link Smart plug": "50:c7:bf:00:56:39",
+                        "iHome": "74:c6:3b:29:d7:1d",
+                        "Belkin wemo motion sensor": "ec:1a:59:83:28:11",
+                        "NEST Protect smoke alarm": "18:b4:30:25:be:e4",
+                        "Netatmo weather station": "70:ee:50:03:b8:ac",
+                        "Withings Smart scale": "00:24:e4:1b:6f:96",
+                        "Blipcare Blood Pressure meter": "74:6a:89:00:2e:25",
+                        "Withings Aura smart sleep sensor": "00:24:e4:20:28:c6",
+                        "Light Bulbs LiFX Smart Bulb": "d0:73:d5:01:83:08",
+                        "Triby Speaker": "18:b7:9e:02:20:44",
+                        "PIX-STAR Photo-frame": "e0:76:d0:33:bb:85",
+                        "HP Printer": "70:5a:0f:e4:9b:c0",
+                        "Samsung Galaxy Tab": "08:21:ef:3b:fc:e3",
+                        "Huebulb": "00:17:88:2b:9a:25",
+                        "Chromecast": "f4:f5:d8:8f:0a:3c",
+                        "Nest Dropcam": "30:8c:fb:b6:ea:45",
+                        }
+    for item in iot_devices.items():
+        if mac_addr in item:
+            return item[0]
 
 
 def ihome_first_pkt_ordinal(file):
@@ -339,6 +362,15 @@ def ihome_first_pkt_ordinal(file):
     }
 
     return ordinal_epoch[d[file]]
+
+def attack_flow_id():
+    attack_flows = {
+        '18-06-05': {
+            'TP-Link Smart plug': [],
+            'Samsung SmartCam':[('191.168.1.248', '149.171.36.239', '5222', '49152', "TCP"),]
+        },
+
+    }
 
 def attack_ordinals(device):
     d = {'Light Bulbs LiFX Smart Bulb': {
@@ -381,16 +413,31 @@ def tp_benign_plot():
     fs3_4min = [sum(i) / len(i) for i in fs3_4min_samples]
     fig = plt.figure()
     ax = fig.add_subplot(1, 1, 1)
-    ax.plot(x, fs2_2min, marker="^", label='FS1', color='r')
-    ax.plot(x, fs2_4min, marker="x", label='FS2', color='b')
-    ax.plot(x, fs3_2min, marker="o", label="FS3", color='g')
-    ax.plot(x, fs3_4min, marker="+", label="FS4", color='c')
+    # ax.plot(x, fs2_2min, marker="^", label='FS1', color='r')
+    # ax.plot(x, fs2_4min, marker="x", label='FS2', color='b')
+    # ax.plot(x, fs3_2min, marker="o", label="FS3", color='g')
+    # ax.plot(x, fs3_4min, marker="+", label="FS4", color='c')
+    ax.set_ylim([90,100])
+    def subcategorybar(X, vals, width=0.8):
+        import numpy as np
+        label = ['FS1', 'FS2', 'FS3', 'FS4']
+        n = len(vals)
+        _X = np.arange(len(X))
+        for i in range(n):
+            ax.bar(_X - width / 2. + i / float(n) * width, vals[i],
+                    width=width / float(n), align="edge", label=label[i])
+        plt.xticks(_X, X)
+
+    subcategorybar(x, [fs2_2min,fs2_4min, fs3_2min,fs3_4min])
+    for item in ([ax.title, ax.xaxis.label, ax.yaxis.label] +
+                 ax.get_xticklabels() + ax.get_yticklabels()):
+        item.set_fontsize(16)
     for item in ([ax.title, ax.xaxis.label, ax.yaxis.label] +
                  ax.get_xticklabels() + ax.get_yticklabels()):
         item.set_fontsize(20)
-    ax.set_xlabel("Sampling rate (s)")
+    ax.set_xlabel("Sampling rate (time/seconds)")
     ax.set_ylabel("TPR (%)")
-    plt.legend(loc='best')
+    plt.legend(loc='best', fontsize=14)
     plt.show()
     plt.savefig("sampling_rate_tpr.png")
 
@@ -418,16 +465,32 @@ def fs_fpr_plot():
     fs3_4min = [sum(i) / len(i) for i in fs3_4min_samples]
     fig = plt.figure()
     ax = fig.add_subplot(1, 1, 1)
-    ax.plot(x, fs2_2min,marker="^",label='FS1', color='r')
-    ax.plot(x, fs2_4min, marker="x", label='FS2', color='b')
-    ax.plot(x, fs3_2min, marker="o", label="FS3", color='g')
-    ax.plot(x, fs3_4min, marker="+", label="FS4", color='c')
+    # ax.plot(x, fs2_2min,marker="^",label='FS1', color='r')
+    # ax.plot(x, fs2_4min, marker="x", label='FS2', color='b')
+    # ax.plot(x, fs3_2min, marker="o", label="FS3", color='g')
+    # ax.plot(x, fs3_4min, marker="+", label="FS4", color='c')
+
+
+
+    def subcategorybar(X, vals, width=0.8):
+        import numpy as np
+        label = ['FS1', 'FS2', 'FS3', 'FS4']
+        n = len(vals)
+        _X = np.arange(len(X))
+        for i in range(n):
+            ax.bar(_X - width / 2. + i / float(n) * width, vals[i],
+                    width=width / float(n), align="edge", label=label[i])
+        plt.xticks(_X, X)
+
+    subcategorybar(x, [fs2_2min,fs2_4min, fs3_2min,fs3_4min])
     for item in ([ax.title, ax.xaxis.label, ax.yaxis.label] +
                  ax.get_xticklabels() + ax.get_yticklabels()):
-        item.set_fontsize(20)
-    ax.set_xlabel("Sampling rate (s)")
+        item.set_fontsize(16)
+
+    # ax.set_title("Feature Set FPR")
+    ax.set_xlabel("Sampling rate (time/seconds)")
     ax.set_ylabel("FPR (%)")
-    plt.legend(loc='best')
+    plt.legend(loc='best', fontsize=12)
     plt.show()
     plt.savefig("sampling_rate_fpr.png")
 
@@ -498,17 +561,216 @@ def plot_sampling_impact(plot_type, model_data, y_label):
             data = model_data[device_type][plot_type][s]
             device_type_avg[device_type][s] = sum(data) / len(data)
 
-    print(device_type_avg)
+    l = []
+    print(l)
+    p = []
     for d in device_type_avg:
         if d == "sensor":
             continue
-        ax.plot(x, list(device_type_avg[d].values()), label=d)
+        # ax.plot(x, list(device_type_avg[d].values()), label=d)
+        l.append(d)
+        p.append(list(device_type_avg[d].values()))
+
+    def subcategorybar(X, vals, width=0.8):
+        import numpy as np
+        # label = ['lighting', 'FS2', 'FS3', 'FS4']
+        n = len(vals)
+        _X = np.arange(len(X))
+        for i in range(n):
+            ax.bar(_X - width / 2. + i / float(n) * width, vals[i],
+                    width=width / float(n), align="edge", label=l[i])
+        plt.xticks(_X, X)
+
+    subcategorybar(x, p)
+    if plot_type == 'accuracy':
+        ax.set_ylim([90,100])
+    if plot_type == 'avg_detection_rate':
+        ax.set_ylim([50,100])
     ax.set_ylabel(y_label)
-    ax.set_xlabel("sampling rate (s)")
-    plt.legend(loc='best', fontsize=14)
+    ax.set_xlabel("Sampling rate (time/seconds)")
+    plt.legend(loc='best', fontsize=13)
     plt.savefig(plot_type+"sampling_impact.png")
     plt.show()
 
+
+def get_infected_devices():
+    inf_devices = {'TP-Link Smart plug': '50:c7:bf:00:56:39',
+                   'Netatmo Welcom': '70:ee:50:18:34:43',
+                   'Huebulb': '00:17:88:2b:9a:25',
+                   'iHome': '74:c6:3b:29:d7:1d',
+                   'Belkin Wemo switch': 'ec:1a:59:79:f4:89',
+                   'Belkin wemo motion sensor': 'ec:1a:59:83:28:11',
+                   'Samsung SmartCam': '00:16:6c:ab:6b:88',
+                   'Light Bulbs LiFX Smart Bulb': 'd0:73:d5:01:83:08'}
+    return inf_devices
+
+
+def stretch_xaxis(p):
+    p.rcParams["figure.figsize"] = [20, 3.50]
+    p.rcParams["figure.autolayout"] = True
+
+def get_graph_save_folder(device_name):
+    save_path = Path(r"C:\Users\amith\Documents\Uni\Masters\Graphs\flow_tp") / device_name
+    return save_path
+
+def get_attack_window_timestamps(device):
+    timestamps = {
+        'Netatmo Welcom': {
+            '18-06-01': {
+                'local_inputs': [(64000, 65200), (66000, 67000)],
+                'local_outputs': [(64400, 65200), (66000, 67000)],
+                'internet_inputs': [(24500, 25900), (49100, 49700), (50300, 51000)],
+                'internet_outputs': [(49100, 49700), (50300, 51000)]
+            }
+        }
+    }
+
+    return timestamps[device]
+
+def yield_pcap(data_path):
+    """This function is for refactoring data set file traversals i.e., yield next pcap in dataset"""
+    pass
+
+
+
+def get_all_attack_epochs(device_attacks_objects):
+    """This function takes in all Attack objects and returns a list of tuples of all attack epochs (start_epoch, end_epoch) for each date"""
+    pcap_epochs = {}
+    for DeviceAttacks in device_attacks_objects:
+        device_attack_epochs = DeviceAttacks.attack_epochs
+        pcap_epochs.update(device_attack_epochs)
+    return pcap_epochs
+
+def get_start_epoch_device_object(start_epoch, device_attacks_objects):
+    for DeviceAttack in device_attacks_objects:
+        epoch_timestamps = list(DeviceAttack.attack_epochs.keys())
+        if start_epoch in epoch_timestamps:
+            return DeviceAttack
+
+def get_epoch_attack_desc(deviceAttack, epoch_timestamp):
+    return deviceAttack.attack_epoch_attack_desc[epoch_timestamp]
+
+
+def get_attack_pkt_ordinal_window(attack_data_path, device_attacks_objects):
+    """TODO: Refactor the directory file loop + REFACTOR THIS WHOLE FUNCTION"""
+    from scapy.all import RawPcapReader, RawPcapNgReader
+    from AttackTimeStamp import AttackTimestamp
+    from scapy.layers.l2 import Ether
+    from io import FileIO
+
+    def typeCast(epoch):
+        return int(str(epoch)[:10])
+
+    device_discard_list = ["Light Bulbs LiFX Smart Bulb", "Huebulb"]
+    infected_devices = get_infected_devices()
+    relevant_addresses = []
+    all_attacks_epoch_timestamps = get_all_attack_epochs(device_attacks_objects)
+    all_timestamp_objects = []
+    print(all_attacks_epoch_timestamps)
+    for i in infected_devices:
+        if i not in device_discard_list:
+            relevant_addresses.append(infected_devices[i])
+    files = []
+    start_epochs = list(all_attacks_epoch_timestamps.keys())
+    end_epochs = list(all_attacks_epoch_timestamps.values())
+    attack_ordinal_window = {}
+
+    """Loop through dataset"""
+    limit = 2
+    print('min epoch', min(start_epochs))
+    for file in attack_data_path.iterdir():
+        count = 0
+        if file.name == '18-06-01.pcap':
+            limit = math.inf
+        date = file.name[:-5]
+        files.append(date)
+        attack_ordinal_window[date] = {}
+        active_attack_timestamp = None
+        is_attack_window_initiated = False
+        print('file', file.name)
+        for pkt_data, pkt_metadata in RawPcapReader(FileIO(file)):
+            count += 1
+            if count < limit:
+                ether_pkt = Ether(pkt_data)
+                # if ether_pkt.src in relevant_addresses or ether_pkt.dst in relevant_addresses:
+                try:
+                    # test the packet metadata tuple to figure out which tuple type is in the pcap
+                    pkt_metadata.tshigh
+                    tuple_type = "tshigh"
+                except AttributeError:
+                    tuple_type = "seconds",
+                if tuple_type == "tshigh":
+                    pkt_epoch_timestamp = typeCast((pkt_metadata.tshigh << 32) | pkt_metadata.tslow)
+                elif tuple_type == "seconds":
+                    print('seconds technique')
+                    pkt_epoch_timestamp = typeCast(pkt_metadata.sec + (pkt_metadata.usec / 1000000))
+
+                # print(file.name, pkt_epoch_timestamp)
+
+                if pkt_epoch_timestamp in start_epochs:
+                    # print(pkt_epoch_timestamp, start_epochs.index(pkt_epoch_timestamp))
+                    try:
+                        assert start_epochs.index(pkt_epoch_timestamp) >= 0
+                    except AssertionError as e:
+                        print("ASSERTION ERROR ON START EPOCH")
+                        continue
+                    # Get device of timestamp
+                    pkt_mac_addrs = [ether_pkt.src, ether_pkt.dst]
+                    deviceAttack = get_start_epoch_device_object(pkt_epoch_timestamp, device_attacks_objects)
+                    if deviceAttack.device_addr not in pkt_mac_addrs:
+                        print("wrong packet")
+                        continue
+                    end_epoch = all_attacks_epoch_timestamps[pkt_epoch_timestamp]
+                    attack_epoch_timestamp = (pkt_epoch_timestamp, end_epoch) # (start, end)
+
+                    # DEBUGGING MAY REQUIRE A CHECK TO SEE IF PREV ATTACK WINDOW COMPUTE IS FINISHED
+                    if active_attack_timestamp is not None:
+                        if active_attack_timestamp.ordinal_window_state != "end_found":
+                            print("ANOTHER START FOUND BEFORE END OF PREV")
+                    if attack_epoch_timestamp in attack_ordinal_window[date]:
+                        """TODO: This is not optimal solution design. Refactor to use a boolean for better reliability and readability"""
+                        """Means attack window is initiated. Assert to make sure). If initiated, increment ordinal window"""
+                        assert active_attack_timestamp.ordinal_window_state == "start_found"
+                        active_attack_timestamp.incrementEndOrdinal()
+                    else:
+                        attack_ordinal_window[date][attack_epoch_timestamp] = (count, count)
+                        TimeStamp = AttackTimestamp(pkt_epoch_timestamp, end_epoch, count)
+                        TimeStamp.set_start_found_state()
+                        print("attack is", get_epoch_attack_desc(deviceAttack, attack_epoch_timestamp), deviceAttack.device_name)
+                        all_timestamp_objects.append(TimeStamp)
+                        active_attack_timestamp = TimeStamp
+                else:
+                    """Either inside attack window or not"""
+                    # Check to avoid referencing errors
+                    if active_attack_timestamp is not None:
+                        if pkt_epoch_timestamp == active_attack_timestamp.end_epoch:
+                            print("end_found")
+                        if active_attack_timestamp.is_end_epoch(pkt_epoch_timestamp):
+                            active_attack_timestamp.set_end_found_state()
+                            print("end found")
+                            active_attack_timestamp.set_test_window(count)
+                            attack_ordinal_window[date][attack_epoch_timestamp] = active_attack_timestamp.ordinal_window
+                        elif active_attack_timestamp.is_start_found():
+                            active_attack_timestamp.incrementEndOrdinal()
+                        else:
+                            continue
+                    else:
+                        continue
+                # print(str(pkt_epoch_timestamp))
+            else:
+                # print('last packet epoch',(pkt_metadata.tshigh << 32) | pkt_metadata.tslow)
+                break
+
+
+    return ['test']
+
+def get_all_attack_annotations():
+    from attack_annotations import Attacks
+    devices = get_all_devices()
+    infected_devices = ["TP-Link Smart plug", "Netatmo Welcom", "Huebulb", "iHome", "Belkin Wemo switch",
+                             "Belkin wemo motion sensor", "Samsung SmartCam", "Light Bulbs LiFX Smart Bulb"]
+    all_annotations = [Attacks(devices[inf_d]) for inf_d in infected_devices]
+    return all_annotations
 
 def get_all_devices():
     return {"Smart Things": "d0:52:a8:00:67:5e",
@@ -537,3 +799,371 @@ def get_all_devices():
                        "Chromecast": "f4:f5:d8:8f:0a:3c",
                        "Nest Dropcam":"30:8c:fb:b6:ea:45",
                        }
+
+
+
+def low_rate_attacks():
+    all_devices = {
+        'FS1':{
+            'reflection':{
+                'tcp': [],
+                'ssdp':[],
+                'snmp':[]
+            },
+            'direct':{
+                'arp': [],
+                'tcp':[],
+                'fraggle':[]
+            }
+        },
+        'FS2': {
+            'reflection': {
+                'tcp': [],
+                'ssdp': [],
+                'snmp': []
+            },
+            'direct': {
+                'arp': [],
+                'tcp': [],
+                'fraggle': []
+            }
+        },
+        'FS3': {
+            'reflection': {
+                'tcp': [],
+                'ssdp': [],
+                'snmp': []
+            },
+            'direct': {
+                'arp': [],
+                'tcp': [],
+                'fraggle': []
+            }
+        },
+        'FS4': {
+            'reflection': {
+                'tcp': [],
+                'ssdp': [],
+                'snmp': []
+            },
+            'direct': {
+                'arp': [],
+                'tcp': [],
+                'fraggle': []
+            }
+        }
+    }
+
+    p = Path(r'C:\Users\amith\Documents\Uni\Masters\results')
+    fs = ['FS2', "FS3"]
+    window = ['120', '240']
+    attack_types = ["TcpSynDevice1L2D", "TcpSynDevice1W2D"]
+
+    import pandas as pd
+    for device in p.iterdir():
+        if "motion" in device.name:
+            continue
+        if 'device_type' in device.name:
+            continue
+        if 'Huebulb' in device.name:
+            continue
+        for f in device.iterdir():
+            f_set = device /f
+            for w in f_set.iterdir():
+                results = w / "60"
+                file = results/"detection_results.csv"
+                try:
+                    data = pd.read_csv(file, header=None)
+                except FileNotFoundError:
+                    continue
+                if "FS2" in f.name:
+                    if "120" in w.name:
+                        fs_key = "FS1"
+                    elif '240' in w.name:
+                        fs_key = "FS2"
+                elif "FS3" in f.name:
+                    if "120" in w.name:
+                        fs_key = "FS3"
+                    elif "240" in w.name:
+                        fs_key = "FS4"
+
+                for index, row in data.iterrows():
+                    if "Reflection" in row[0] and "100" in row[0]:
+                        # print(row[0])
+                        all_devices[fs_key]['reflection']['tcp'].append(row[3])
+                    if "Udp" in row[0] and "100" in row[0]:
+                        all_devices[fs_key]['direct']['fraggle'].append(row[3])
+                    if "Snmp" in row[0] and "100" in row[0] :
+                        all_devices[fs_key]['reflection']['snmp'].append(row[3])
+                    if 'Arp' in row[0] and "100" in row[0]:
+                        all_devices[fs_key]['direct']['arp'].append(row[3])
+                    if "Tcp" in row[0] and "Device" in row[0] and "100" in row[0]:
+                        all_devices[fs_key]['direct']['tcp'].append(row[3])
+    import numpy as np
+    out = {fs: {t: {attack: np.mean(all_devices[fs][t][attack]) for attack in all_devices[fs][t]} for t in all_devices[fs]} for fs in all_devices}
+    print(out)
+
+
+def plot_attack_rate(data, title):
+    x = ['10', '30', '60']
+    import numpy as np
+    fig = plt.figure()
+    ax = fig.add_subplot(1, 1, 1)
+    for item in ([ax.title, ax.xaxis.label, ax.yaxis.label] +
+                 ax.get_xticklabels() + ax.get_yticklabels()):
+        item.set_fontsize(15)
+    ax.set_xlabel("Sampling rate (time/seconds)")
+    t = [10, 30, 60]
+    ax.plot(x, np.poly1d(np.polyfit(t, data['FS4'], 1))(np.unique(t)), label='FS1', color='b')
+    ax.plot(x, np.poly1d(np.polyfit(t, data['FS2'], 1))(np.unique(t)), label='FS2', color='g')
+    ax.plot(x, np.poly1d(np.polyfit(t, data['FS3'], 1))(np.unique(t)), label='FS3', color='r')
+    ax.plot(x, np.poly1d(np.polyfit(t, data['FS1'], 1))(np.unique(t)), label='FS4', color='m')
+    ax.set_ylabel("Detection rate (%)")
+    ax.set_title(title)
+    plt.legend(loc='best', fontsize=16)
+    plt.show()
+
+def fs_sets_plots():
+    first =  {'FS1': {'reflection': {'tcp': 64.54545454545455, 'ssdp': 40.8, 'snmp': 50.0}, 'direct': {'arp': 62.0, 'tcp': 65.05681818181819, 'fraggle': 90.0}},
+              'FS2': {'reflection': {'tcp': 58.33333333333333, 'ssdp': 52.5, 'snmp': 44.444444444444436}, 'direct': {'arp': 33.33333333333333, 'tcp': 47.91666666666666, 'fraggle': 33.33333333333333}},
+              'FS3': {'reflection': {'tcp': 62.36742424242425, 'ssdp': 54.5, 'snmp': 44.44444444444445}, 'direct': {'arp': 54.666666666666664, 'tcp': 60.227272727272734, 'fraggle': 90.0}},
+              'FS4': {'reflection': {'tcp': 60.416666666666664, 'ssdp': 60, 'snmp': 44.444444444444436}, 'direct': {'arp': 39.99999999999999, 'tcp': 49.99999999999999, 'fraggle': 33.33333333333333}}}
+
+    second = {'FS1': {'reflection': {'tcp': 65.58712121212122, 'ssdp': 35.7, 'snmp': 44.444444444444436}, 'direct': {'arp': 50.0, 'tcp': 61.51515151515152, 'fraggle': 70.0}},
+              'FS2': {'reflection': {'tcp': 58.33333333333333, 'ssdp': 42.3, 'snmp': 44.444444444444436}, 'direct': {'arp': 39.99999999999999, 'tcp': 47.91666666666666, 'fraggle': 33.33333333333333}},
+              'FS3': {'reflection': {'tcp': 61.93181818181818, 'ssdp': 45.6, 'snmp': 33.33333333333333}, 'direct': {'arp': 61.333333333333336, 'tcp': 60.96590909090909, 'fraggle': 70.0}},
+              'FS4': {'reflection': {'tcp': 58.33333333333333, 'ssdp': 50.3, 'snmp': 33.33333333333333}, 'direct': {'arp': 39.99999999999999, 'tcp': 54.16666666666666, 'fraggle': 33.33333333333333}}}
+
+    third = {'FS1': {'reflection': {'tcp': 64.01515151515152, 'ssdp': 30.5, 'snmp': 38.888888888888886}, 'direct': {'arp': 66.0, 'tcp': 62.026515151515156, 'fraggle': 70.0}},
+             'FS2': {'reflection': {'tcp': 56.25, 'ssdp': 40.9, 'snmp': 33.33333333333333}, 'direct': {'arp': 53.33333333333333, 'tcp': 41.66666666666666, 'fraggle': 49.99999999999999}},
+             'FS3': {'reflection': {'tcp': 64.01515151515152, 'ssdp': 45.6, 'snmp': 27.77777777777777}, 'direct': {'arp': 50.0, 'tcp': 54.659090909090914, 'fraggle': 90.0}},
+             'FS4': {'reflection': {'tcp': 56.25, 'ssdp': 60.4, 'snmp': 33.33333333333333}, 'direct': {'arp': 60.0, 'tcp': 54.16666666666666, 'fraggle': 49.99999999999999}}}
+
+
+
+    x = ['10', '30', '60']
+    sets = ["FS1", "FS2", "FS3", "FS4"]
+    s = [first, second, third]
+    reflective_averages = {fs:[] for fs in sets}
+    direct_averages = {fs:[] for fs in sets}
+    import numpy as np
+    for d in s:
+        for fs in d:
+            vals = list(d[fs]['reflection'].values())
+            reflective_averages[fs].append(np.mean(vals))
+            direct_averages[fs].append(np.mean(list(d[fs]['direct'].values())))
+
+    # print(direct_averages)
+    # print(reflective_averages)
+    # plot_attack_rate(reflective_averages, "Low Rate Reflective Attacks")
+    plot_attack_rate(direct_averages,"Low Rate Direct Attacks")
+
+
+def fs_medium_rate():
+    first = {'FS1': {'reflection': {'tcp': 82.5, 'ssdp': 90, 'snmp': 93.33333333333333}, 'direct': {'arp': 82.0, 'tcp': 72.4621212121212, 'fraggle': 90.0}},
+             'FS2': {'reflection': {'tcp': 54.166666666666664, 'ssdp': 65, 'snmp': 66.66666666666666}, 'direct': {'arp': 60.0, 'tcp': 60.416666666666664, 'fraggle': 66.66666666666666}},
+             'FS3': {'reflection': {'tcp': 92.5, 'ssdp': 75.6, 'snmp': 86.66666666666667}, 'direct': {'arp': 79.33333333333333, 'tcp': 86.09848484848484, 'fraggle': 90.0}},
+             'FS4': {'reflection': {'tcp': 64.58333333333333, 'ssdp': 55, 'snmp': 44.444444444444436}, 'direct': {'arp': 60.0, 'tcp': 70.83333333333333, 'fraggle': 66.66666666666666}}}
+
+
+    second = {'FS1': {'reflection': {'tcp': 83.75, 'ssdp': 81, 'snmp': 86.66666666666667}, 'direct': {'arp': 86.0, 'tcp': 80.30303030303031, 'fraggle': 70.0}},
+              'FS2': {'reflection': {'tcp': 58.33333333333333, 'ssdp': 53, 'snmp': 55.55555555555554}, 'direct': {'arp': 66.66666666666666, 'tcp': 64.58333333333333, 'fraggle': 66.66666666666666}},
+              'FS3': {'reflection': {'tcp': 85.0, 'ssdp': 82, 'snmp': 80.0}, 'direct': {'arp': 86.66666666666666, 'tcp': 82.57575757575758, 'fraggle': 80.0}},
+              'FS4': {'reflection': {'tcp': 58.33333333333333, 'ssdp': 61, 'snmp': 66.66666666666666}, 'direct': {'arp': 86.66666666666666, 'tcp': 64.58333333333333, 'fraggle': 66.66666666666666}}}
+
+
+    third = {'FS1': {'reflection': {'tcp': 76.25, 'ssdp': 79, 'snmp': 86.66666666666667}, 'direct': {'arp': 86.66666666666666, 'tcp': 76.78030303030303, 'fraggle': 80.0}},
+             'FS2': {'reflection': {'tcp': 68.75, 'ssdp': 67, 'snmp': 66.66666666666666}, 'direct': {'arp': 73.33333333333333, 'tcp': 60.41666666666666, 'fraggle': 66.66666666666666}},
+             'FS3': {'reflection': {'tcp': 76.25, 'ssdp': 79, 'snmp': 93.33333333333333}, 'direct': {'arp': 86.66666666666666, 'tcp': 76.66666666666666, 'fraggle': 80.0}},
+             'FS4': {'reflection': {'tcp': 68.75, 'ssdp':67, 'snmp': 66.66666666666666}, 'direct': {'arp': 86.66666666666666, 'tcp': 62.49999999999999, 'fraggle': 66.66666666666666}}}
+
+    sets = ["FS1", "FS2", "FS3", "FS4"]
+    s = [first, second, third]
+    reflective_averages = {fs: [] for fs in sets}
+    direct_averages = {fs: [] for fs in sets}
+    import numpy as np
+    for d in s:
+        for fs in d:
+            vals = list(d[fs]['reflection'].values())
+            reflective_averages[fs].append(np.mean(vals))
+            direct_averages[fs].append(np.mean(list(d[fs]['direct'].values())))
+
+    plot_attack_rate(reflective_averages, "Medium Rate Reflective Attacks")
+    # plot_attack_rate(direct_averages, "Medium Rate Direct Attacks")
+
+
+def fs_high_rate():
+    first = {'FS1': {'reflection': {'tcp': 87.5, 'ssdp': 95, 'snmp': 100.0}, 'direct': {'arp': 53.33333333333333, 'tcp': 88.75, 'fraggle': 100.0}},
+             'FS2': {'reflection': {'tcp': 72.91666666666666, 'ssdp': 75, 'snmp': 77.77777777777777}, 'direct': {'arp': 73.33333333333333, 'tcp': 66.66666666666666, 'fraggle': 66.66666666666666}},
+             'FS3': {'reflection': {'tcp': 87.5, 'ssdp': 92, 'snmp': 100.0}, 'direct': {'arp': 93.33333333333333, 'tcp': 90.0, 'fraggle': 100.0}},
+             'FS4': {'reflection': {'tcp': 72.91666666666666, 'ssdp': 75, 'snmp': 77.77777777777777}, 'direct': {'arp': 80.0, 'tcp': 75.0, 'fraggle': 66.66666666666666}}}
+    second = {'FS1': {'reflection': {'tcp': 81.25, 'ssdp': 84, 'snmp': 86.66666666666667}, 'direct': {'arp': 93.33333333333333, 'tcp': 86.25, 'fraggle': 80.0}},
+              'FS2': {'reflection': {'tcp': 60.41666666666666, 'ssdp': 72, 'snmp': 77.77777777777777}, 'direct': {'arp': 73.33333333333333, 'tcp': 66.66666666666666, 'fraggle': 66.66666666666666}},
+              'FS3': {'reflection': {'tcp': 80.0, 'ssdp': 84.5, 'snmp': 86.66666666666667}, 'direct': {'arp': 96.66666666666667, 'tcp': 86.25, 'fraggle': 80.0}},
+              'FS4': {'reflection': {'tcp': 68.75, 'ssdp': 74.5, 'snmp': 77.77777777777777}, 'direct': {'arp': 80.0, 'tcp': 64.58333333333333, 'fraggle': 66.66666666666666}}}
+
+    third = {'FS1': {'reflection': {'tcp': 73.75, 'ssdp': 80, 'snmp': 86.66666666666667}, 'direct': {'arp': 80.66666666666667, 'tcp': 78.75, 'fraggle': 80.0}},
+             'FS2': {'reflection': {'tcp': 75.0, 'ssdp': 76, 'snmp': 77.77777777777777}, 'direct': {'arp': 80.0, 'tcp': 66.66666666666666, 'fraggle': 66.66666666666666}},
+             'FS3': {'reflection': {'tcp': 73.75, 'ssdp': 84, 'snmp': 86.66666666666667}, 'direct': {'arp': 96.66666666666667, 'tcp': 78.75, 'fraggle': 80.0}},
+             'FS4': {'reflection': {'tcp': 75.0, 'ssdp': 76, 'snmp': 77.77777777777777}, 'direct': {'arp': 80.0, 'tcp': 72.91666666666666, 'fraggle': 66.66666666666666}}}
+
+    sets = ["FS1", "FS2", "FS3", "FS4"]
+    s = [first, second, third]
+    reflective_averages = {fs: [] for fs in sets}
+    direct_averages = {fs: [] for fs in sets}
+    import numpy as np
+    for d in s:
+        for fs in d:
+            vals = list(d[fs]['reflection'].values())
+            reflective_averages[fs].append(np.mean(vals))
+            direct_averages[fs].append(np.mean(list(d[fs]['direct'].values())))
+
+
+    # print(direct_averages)
+    # print(reflective_averages)
+    plot_attack_rate(reflective_averages, "High Rate Reflective Attacks")
+    plot_attack_rate(direct_averages, "High Rate Direct Attacks")
+
+
+def table_results():
+    import numpy as np
+    low_first = {'FS1': {'reflection': {'tcp': 64.54545454545455, 'ssdp': 40.8, 'snmp': 50.0}, 'direct': {'arp': 62.0, 'tcp': 65.05681818181819, 'fraggle': 90.0}},
+              'FS2': {'reflection': {'tcp': 58.33333333333333, 'ssdp': 52.5, 'snmp': 44.444444444444436}, 'direct': {'arp': 33.33333333333333, 'tcp': 47.91666666666666, 'fraggle': 33.33333333333333}},
+              'FS3': {'reflection': {'tcp': 62.36742424242425, 'ssdp': 54.5, 'snmp': 44.44444444444445}, 'direct': {'arp': 54.666666666666664, 'tcp': 60.227272727272734, 'fraggle': 90.0}},
+              'FS4': {'reflection': {'tcp': 60.416666666666664, 'ssdp': 60, 'snmp': 44.444444444444436}, 'direct': {'arp': 39.99999999999999, 'tcp': 49.99999999999999, 'fraggle': 33.33333333333333}}}
+    low_second = {'FS1': {'reflection': {'tcp': 65.58712121212122, 'ssdp': 35.7, 'snmp': 44.444444444444436}, 'direct': {'arp': 50.0, 'tcp': 61.51515151515152, 'fraggle': 70.0}},
+              'FS2': {'reflection': {'tcp': 58.33333333333333, 'ssdp': 42.3, 'snmp': 44.444444444444436}, 'direct': {'arp': 39.99999999999999, 'tcp': 47.91666666666666, 'fraggle': 33.33333333333333}},
+              'FS3': {'reflection': {'tcp': 61.93181818181818, 'ssdp': 45.6, 'snmp': 33.33333333333333}, 'direct': {'arp': 61.333333333333336, 'tcp': 60.96590909090909, 'fraggle': 70.0}},
+              'FS4': {'reflection': {'tcp': 58.33333333333333, 'ssdp': 50.3, 'snmp': 33.33333333333333}, 'direct': {'arp': 39.99999999999999, 'tcp': 54.16666666666666, 'fraggle': 33.33333333333333}}}
+    low_third = {'FS1': {'reflection': {'tcp': 64.01515151515152, 'ssdp': 30.5, 'snmp': 38.888888888888886}, 'direct': {'arp': 66.0, 'tcp': 62.026515151515156, 'fraggle': 70.0}},
+             'FS2': {'reflection': {'tcp': 56.25, 'ssdp': 40.9, 'snmp': 33.33333333333333}, 'direct': {'arp': 53.33333333333333, 'tcp': 41.66666666666666, 'fraggle': 49.99999999999999}},
+             'FS3': {'reflection': {'tcp': 64.01515151515152, 'ssdp': 45.6, 'snmp': 27.77777777777777}, 'direct': {'arp': 50.0, 'tcp': 54.659090909090914, 'fraggle': 90.0}},
+             'FS4': {'reflection': {'tcp': 56.25, 'ssdp': 60.4, 'snmp': 33.33333333333333}, 'direct': {'arp': 60.0, 'tcp': 54.16666666666666, 'fraggle': 49.99999999999999}}}
+    med_first = {'FS1': {'reflection': {'tcp': 82.5, 'ssdp': 90, 'snmp': 93.33333333333333}, 'direct': {'arp': 82.0, 'tcp': 72.4621212121212, 'fraggle': 90.0}},
+             'FS2': {'reflection': {'tcp': 54.166666666666664, 'ssdp': 65, 'snmp': 66.66666666666666}, 'direct': {'arp': 60.0, 'tcp': 60.416666666666664, 'fraggle': 66.66666666666666}},
+             'FS3': {'reflection': {'tcp': 92.5, 'ssdp': 75.6, 'snmp': 86.66666666666667}, 'direct': {'arp': 79.33333333333333, 'tcp': 86.09848484848484, 'fraggle': 90.0}},
+             'FS4': {'reflection': {'tcp': 64.58333333333333, 'ssdp': 55, 'snmp': 44.444444444444436}, 'direct': {'arp': 60.0, 'tcp': 70.83333333333333, 'fraggle': 66.66666666666666}}}
+    med_second = {'FS1': {'reflection': {'tcp': 83.75, 'ssdp': 81, 'snmp': 86.66666666666667}, 'direct': {'arp': 86.0, 'tcp': 80.30303030303031, 'fraggle': 70.0}},
+              'FS2': {'reflection': {'tcp': 58.33333333333333, 'ssdp': 53, 'snmp': 55.55555555555554}, 'direct': {'arp': 66.66666666666666, 'tcp': 64.58333333333333, 'fraggle': 66.66666666666666}},
+              'FS3': {'reflection': {'tcp': 85.0, 'ssdp': 82, 'snmp': 80.0}, 'direct': {'arp': 86.66666666666666, 'tcp': 82.57575757575758, 'fraggle': 80.0}},
+              'FS4': {'reflection': {'tcp': 58.33333333333333, 'ssdp': 61, 'snmp': 66.66666666666666}, 'direct': {'arp': 86.66666666666666, 'tcp': 64.58333333333333, 'fraggle': 66.66666666666666}}}
+    med_third = {'FS1': {'reflection': {'tcp': 76.25, 'ssdp': 79, 'snmp': 86.66666666666667}, 'direct': {'arp': 86.66666666666666, 'tcp': 76.78030303030303, 'fraggle': 80.0}},
+             'FS2': {'reflection': {'tcp': 68.75, 'ssdp': 67, 'snmp': 66.66666666666666}, 'direct': {'arp': 73.33333333333333, 'tcp': 60.41666666666666, 'fraggle': 66.66666666666666}},
+             'FS3': {'reflection': {'tcp': 76.25, 'ssdp': 79, 'snmp': 93.33333333333333}, 'direct': {'arp': 86.66666666666666, 'tcp': 76.66666666666666, 'fraggle': 80.0}},
+             'FS4': {'reflection': {'tcp': 68.75, 'ssdp':67, 'snmp': 66.66666666666666}, 'direct': {'arp': 86.66666666666666, 'tcp': 62.49999999999999, 'fraggle': 66.66666666666666}}}
+    high_first = {'FS1': {'reflection': {'tcp': 87.5, 'ssdp': 95, 'snmp': 100.0}, 'direct': {'arp': 53.33333333333333, 'tcp': 88.75, 'fraggle': 100.0}},
+             'FS2': {'reflection': {'tcp': 72.91666666666666, 'ssdp': 75, 'snmp': 77.77777777777777}, 'direct': {'arp': 73.33333333333333, 'tcp': 66.66666666666666, 'fraggle': 66.66666666666666}},
+             'FS3': {'reflection': {'tcp': 87.5, 'ssdp': 92, 'snmp': 100.0}, 'direct': {'arp': 93.33333333333333, 'tcp': 90.0, 'fraggle': 100.0}},
+             'FS4': {'reflection': {'tcp': 72.91666666666666, 'ssdp': 75, 'snmp': 77.77777777777777}, 'direct': {'arp': 80.0, 'tcp': 75.0, 'fraggle': 66.66666666666666}}}
+    high_second = {'FS1': {'reflection': {'tcp': 81.25, 'ssdp': 84, 'snmp': 86.66666666666667}, 'direct': {'arp': 93.33333333333333, 'tcp': 86.25, 'fraggle': 80.0}},
+              'FS2': {'reflection': {'tcp': 60.41666666666666, 'ssdp': 72, 'snmp': 77.77777777777777}, 'direct': {'arp': 73.33333333333333, 'tcp': 66.66666666666666, 'fraggle': 66.66666666666666}},
+              'FS3': {'reflection': {'tcp': 80.0, 'ssdp': 84.5, 'snmp': 86.66666666666667}, 'direct': {'arp': 96.66666666666667, 'tcp': 86.25, 'fraggle': 80.0}},
+              'FS4': {'reflection': {'tcp': 68.75, 'ssdp': 74.5, 'snmp': 77.77777777777777}, 'direct': {'arp': 80.0, 'tcp': 64.58333333333333, 'fraggle': 66.66666666666666}}}
+    high_third = {'FS1': {'reflection': {'tcp': 73.75, 'ssdp': 80, 'snmp': 86.66666666666667}, 'direct': {'arp': 80.66666666666667, 'tcp': 78.75, 'fraggle': 80.0}},
+             'FS2': {'reflection': {'tcp': 75.0, 'ssdp': 76, 'snmp': 77.77777777777777}, 'direct': {'arp': 80.0, 'tcp': 66.66666666666666, 'fraggle': 66.66666666666666}},
+             'FS3': {'reflection': {'tcp': 73.75, 'ssdp': 84, 'snmp': 86.66666666666667}, 'direct': {'arp': 96.66666666666667, 'tcp': 78.75, 'fraggle': 80.0}},
+             'FS4': {'reflection': {'tcp': 75.0, 'ssdp': 76, 'snmp': 77.77777777777777}, 'direct': {'arp': 80.0, 'tcp': 72.91666666666666, 'fraggle': 66.66666666666666}}}
+
+    lists = [low_first, low_second, low_third, med_first, med_second, med_third, high_first, high_second, high_third]
+    sets = ["FS1", "FS2", "FS3", "FS4"]
+    averages = {
+        'FS1':{
+            'reflection':{
+                'tcp': [],
+                'ssdp':[],
+                'snmp':[]
+            },
+            'direct':{
+                'arp': [],
+                'tcp':[],
+                'fraggle':[]
+            }
+        },
+        'FS2': {
+            'reflection': {
+                'tcp': [],
+                'ssdp': [],
+                'snmp': []
+            },
+            'direct': {
+                'arp': [],
+                'tcp': [],
+                'fraggle': []
+            }
+        },
+        'FS3': {
+            'reflection': {
+                'tcp': [],
+                'ssdp': [],
+                'snmp': []
+            },
+            'direct': {
+                'arp': [],
+                'tcp': [],
+                'fraggle': []
+            }
+        },
+        'FS4': {
+            'reflection': {
+                'tcp': [],
+                'ssdp': [],
+                'snmp': []
+            },
+            'direct': {
+                'arp': [],
+                'tcp': [],
+                'fraggle': []
+            }
+        }
+    }
+    for d in lists:
+        for fs in d:
+            for attack_type in d[fs]:
+                for attack in d[fs][attack_type]:
+                    averages[fs][attack_type][attack].append(d[fs][attack_type][attack])
+
+    # print(averages)
+    for f in averages:
+        for attack_t in averages[f]:
+            for a in averages[f][attack_t]:
+                print(f, attack_t, a, np.mean(averages[f][attack_t][a]))
+                print('-------------')
+
+
+
+
+def find_ordinal(device, file):
+    print("finding ordianal")
+    ordinal_check = [3043317, 3134056, 3259364, 4292026]
+    saved_traffic = Path(r"C:\Users\amith\Documents\Uni\Masters\JNCA\traffic\processed-traffic\Attack")
+    traffic = unpickle_network_trace_and_device_obj(str(saved_traffic), files='_18-06-01', devices=device)
+    found_ordinal = []
+    for network_obj in traffic:
+        for device_obj in traffic[network_obj]:
+            flow_table = device_obj.merge_flow_dict()
+            for flow in flow_table:
+                for pkt in flow_table[flow]:
+                    if pkt['ordinal'] in ordinal_check:
+                        print('found ordinal')
+                        direction = None
+                        if flow in device_obj.flows['incoming']:
+                            direction = 'inputs'
+                        else:
+                            direction = 'output'
+                        found_ordinal.append((pkt, flow, direction))
+
+    for data in found_ordinal:
+        print(data)
+
+
+first = [(20088.0, 20688.0), (16870.0, 17470.0), (18477.0, 19077.0), (42538.0, 43139.0), (44149.0, 44750.0), (45760.0, 46360.0),
+         (71464.0, 72064.0), (73079.0, 73679.0), (61400.0, 62000.0), (58199.0, 58800.0), (59800.0, 60400.0)]
+
+second = [(30911.0, 31512.0), (32524.0, 33124.0), (34131.0, 34732.0), (304.0, 904.0), (59279.0, 59879.0), (60892.0, 61492.0),
+          (62518.0, 63118.0), (25114.0, 25715.0), (26715.0, 27315.0), (28315.0, 28915.0)]
+
+
+
+
+
+

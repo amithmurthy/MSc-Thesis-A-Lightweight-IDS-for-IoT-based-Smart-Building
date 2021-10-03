@@ -74,6 +74,8 @@ class NetworkTrace:
         self.device_flow_stats = {addr: {'incoming': {}, 'outgoing': {}} for addr in self.keys_list}
         self.ordinal_timestamp = kwargs['ordinal_timestamp'] if 'ordinal_timestamp' in kwargs.keys() else None
         # logging.basicConfig(filename=self.file_name[0:-5]+"log", level=logging.DEBUG)
+        self.infected_devices = ["TP-Link Smart plug", "Netatmo Welcom", "Huebulb", "iHome", "Belkin Wemo switch","Belkin wemo motion sensor", "Samsung SmartCam", "Light Bulbs LiFX Smart Bulb"]
+
 
     def flow_stats(self, device):
         """
@@ -222,11 +224,14 @@ class NetworkTrace:
             v.set_visible(False)
         plt.savefig(self.file_name+ name)
 
+    def KB(self, bytes):
+        return [x/1000 for x in bytes]
+
     def device_signature_plots(self,device_objs):
         import tools
         ax = tools.get_ax()
-        ax.set_xlabel("Mean traffic volume (bytes)")
-        ax.set_ylabel("Standard deviation traffic volume (bytes)")
+        ax.set_xlabel("Mean (KB)")
+        ax.set_ylabel("Standard deviation(KB)")
         used_colors = []
         def get_unique_colour():
             c = np.random.rand(3,)
@@ -240,7 +245,7 @@ class NetworkTrace:
             # if device_obj.device_name == "Dropcam":
             if "Router" in device_obj.device_name:
                 continue
-            window_vectors = device_obj.create_traffic_volume_features("bidirectional")
+            window_vectors = device_obj.test()
             x = []
             y = []
             for k in window_vectors:
@@ -248,12 +253,15 @@ class NetworkTrace:
                 y.append(window_vectors[k]['std'])
             if len(x) > 1 and len(y) > 1:
                 col = get_unique_colour()
-                ax.scatter(x, y, label=device_obj.device_name, color=col)
+
+                ax.scatter(self.KB(x), self.KB(y), label=device_obj.device_name, color=col)
         # plt.legend(loc='best')
+        plt.legend(bbox_to_anchor=(0., 1.02, 1., .102), loc=3,
+                   ncol=2, mode="expand", prop={'size': 12}, borderaxespad=0.)
         save_path = Path(self.save_folder) / str(self.file_name+'device_signature.png')
         plt.savefig(str(save_path))
         handles, labels = ax.get_legend_handles_labels()
-        self.save_legend(handles, labels, "device_signature.png")
+        # self.save_legend(handles, labels, "device_signature.png")
         # ax1.figure.savefig('device_signature_legend.jpeg ')
         plt.show()
 
@@ -272,6 +280,11 @@ class NetworkTrace:
         print("processed file {0}, number of packets {1}".format(self.file_name, count))
         print('---------------')
 
+    def get_all_attack_annotations(self):
+        from attack_annotations import Attacks
+        addrs = [self.iot_devices[d] for d in self.infected_devices]
+        annotation_objs = [Attacks(addrs[i]) for i in addrs]
+        return annotation_objs
 
     def device_flow_direction_signature(self, device_objs):
         import tools
